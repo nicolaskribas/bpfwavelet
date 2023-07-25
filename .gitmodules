@@ -1,0 +1,6 @@
+[submodule "libbpf"]
+	path = libbpf
+	url = git@github.com:libbpf/libbpf.git
+[submodule "bpftool"]
+	path = bpftool
+	url = git@github.com:libbpf/bpftool.git
