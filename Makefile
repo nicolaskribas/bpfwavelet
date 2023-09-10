@@ -1,11 +1,11 @@
 SRC := src
 OUTPUT := .output
-CLANG ?= clang-15
+CLANG ?= clang
 LIBBPF_SRC := $(abspath libbpf/src)
 BPFTOOL_SRC := $(abspath bpftool/src)
 LIBBPF_OBJ := $(abspath $(OUTPUT)/libbpf.a)
 BPFTOOL_OUTPUT ?= $(abspath $(OUTPUT)/bpftool)
-BPFTOOL ?= $(BPFTOOL_OUTPUT)/bpftool
+BPFTOOL ?= $(BPFTOOL_OUTPUT)/bootstrap/bpftool
 ARCH ?= $(shell uname -m | sed 's/x86_64/x86/' \
 			 | sed 's/arm.*/arm/' \
 			 | sed 's/aarch64/arm64/' \
@@ -18,11 +18,10 @@ VMLINUX := vmlinux/$(ARCH)/vmlinux.h
 # libbpf to avoid dependency on system-wide headers, which could be missing or
 # outdated
 INCLUDES := -I$(OUTPUT) -Ilibbpf/include/uapi -I$(dir $(VMLINUX))
-CFLAGS := -g -Wall -Wextra
+CFLAGS := -g -Wall
 ALL_LDFLAGS := $(LDFLAGS) $(EXTRA_LDFLAGS)
 
-APPS = wavelets
-
+APPS = bpfwavelet
 
 # Get Clang's default includes on this system. We'll explicitly add these dirs
 # to the includes list when compiling with `-target bpf` because otherwise some
@@ -79,7 +78,7 @@ $(LIBBPF_OBJ): $(wildcard $(LIBBPF_SRC)/*.[ch] $(LIBBPF_SRC)/Makefile) | $(OUTPU
 # Build bpftool
 $(BPFTOOL): | $(BPFTOOL_OUTPUT)
 	$(call msg,BPFTOOL,$@)
-	$(Q)$(MAKE) ARCH= CROSS_COMPILE= OUTPUT=$(BPFTOOL_OUTPUT)/ -C $(BPFTOOL_SRC)
+	$(Q)$(MAKE) ARCH= CROSS_COMPILE= OUTPUT=$(BPFTOOL_OUTPUT)/ -C $(BPFTOOL_SRC) bootstrap
 
 
 # Build BPF code
@@ -101,7 +100,6 @@ $(patsubst %,$(OUTPUT)/%.o,$(APPS)): %.o: %.skel.h
 $(OUTPUT)/%.o: $(SRC)/%.c $(wildcard $(SRC)/%.h) | $(OUTPUT)
 	$(call msg,CC,$@)
 	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(filter $(SRC)/%.c,$^) -o $@
-
 
 # Build application binary
 $(APPS): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) | $(OUTPUT)
