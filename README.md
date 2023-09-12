@@ -10,7 +10,7 @@ Also, this project depends on `libbpf` and `bpftool`. We do vendoring of both as
 So clone the repository like this:
 
 ```shell
-git clone --recurse-submodules <url>
+git clone --recurse-submodules https://github.com/nicolaskribas/bpfwavelet.git
 ```
 
 If you already cloned the repository you can initialize the submodules like this:

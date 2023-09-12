@@ -23,14 +23,14 @@ struct {
 __u64 alpha;
 __u64 beta;
 __u64 nsecs;
-__u8 levels;
+__u16 levels;
 
 static const __u32 timer_key = 0;
 static bool timer_was_init = false;
 static __u64 pkt_count = 0;
 static __u64 sample_idx = 0;
-static __u64 w[MAX_LEVELS] = { 0 };
-static __u64 s[MAX_LEVELS] = { 0 };
+static __u64 w[MAX_LEVELS + 1] = { 0 };
+static __u64 s[MAX_LEVELS + 1] = { 0 };
 
 struct timer_wrapper {
 	struct bpf_timer timer;
@@ -38,7 +38,7 @@ struct timer_wrapper {
 
 static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *wrap)
 {
-	__u8 j;
+	__u16 j;
 	__u64 x, k;
 	struct event *e;
 
@@ -46,27 +46,27 @@ static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *w
 	x = __sync_fetch_and_and(&pkt_count, 0); // atomically read then set to 0
 	k = sample_idx;
 
-	for (j = 0; j < levels; j++) {
+	for (j = 0; j <= levels && j <= MAX_LEVELS; j++) {
 		if (k % 2 == 0) {
 			w[j] = x;
 			break;
 		}
 		if (j != 0) { // dont calculate energy for lvl 0 (signal)
-			s[j] += (w[j] - x) * (w[j] - x);
+			s[j] += (w[j] - x) * (w[j] - x); // s_j <- s_j + (w_{j-1,0} - w_{j-1,1})^2
 
 			if (j >= 2) { // compare with prev only lvl 2 onwards
-				if (2 * alpha * s[j] < beta * s[j - 1]) {
+				if (beta * s[j - 1] > 2 * alpha * s[j]) {
 					e = bpf_ringbuf_reserve(&rb, sizeof(struct event), 0);
 					if (!e) {
 						return 0;
 					}
-					e->level = j;
+					e->level = j - 1;
 					bpf_ringbuf_submit(e, 0);
 				}
 			}
 		}
 
-		x += w[j];
+		x += w[j]; // w_{j-1,0} + w_{j-1,1}
 		k >>= 1;
 	}
 

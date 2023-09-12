@@ -45,7 +45,7 @@ void usage(char *prog_name)
 static int handle_event(void *ctx, void *data, size_t data_sz)
 {
 	const struct event *e = data;
-	printf("%hhu\n", e->level);
+	printf("%hu\n", e->level);
 
 	return 0;
 }
@@ -63,7 +63,7 @@ int main(int argc, char **argv)
 	__u64 alpha = DEFAULT_ALPHA;
 	__u64 beta = DEFAULT_BETA;
 	__u64 interval = DEFAULT_INTERVAL;
-	__u8 levels = DEFAULT_LEVELS;
+	__u16 levels = DEFAULT_LEVELS;
 
 	while ((c = getopt(argc, argv, ":vha:b:t:l:")) != -1) {
 		switch (c) {
@@ -99,7 +99,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case 'l':
-			read = sscanf(optarg, "%hhu", &levels);
+			read = sscanf(optarg, "%hu", &levels);
 			if (read != 1) {
 				fprintf(stderr, "error: could not parse argument for '-l'\n");
 				usage(argv[0]);

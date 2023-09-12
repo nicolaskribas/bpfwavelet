@@ -2,7 +2,7 @@
 #define __BPFWAVELET_H
 
 struct event {
-	char level; // u8
+	short unsigned int level;
 };
 
 #endif /* __BPFWAVELET_H */
