@@ -6,13 +6,18 @@ char __license[] SEC("license") = "GPL";
 
 #define MAX_LEVELS 256
 
-// array of lenght 1, because the time must be inside a map
+// array of lenght 1, because the timer must be inside a map
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__uint(max_entries, 1);
-	__type(key, u32);
-	__type(value, struct counter);
-} flow SEC(".maps");
+	__type(key, __u32);
+	__type(value, struct timer_wrapper);
+} timer_map SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} rb SEC(".maps");
 
 // this variables are set in the userspace code
 __u64 alpha;
@@ -20,52 +25,49 @@ __u64 beta;
 __u64 nsecs;
 __u8 levels;
 
+static const __u32 timer_key = 0;
 static bool timer_was_init = false;
-static u64 pkt_count = 0;
-static u64 sample_idx = 0;
-static u64 w[MAX_LEVELS] = { 0 };
-static u64 s[MAX_LEVELS - 1] = { 0 };
+static __u64 pkt_count = 0;
+static __u64 sample_idx = 0;
+static __u64 w[MAX_LEVELS] = { 0 };
+static __u64 s[MAX_LEVELS] = { 0 };
 
-struct counter {
+struct timer_wrapper {
 	struct bpf_timer timer;
 };
 
-static int calculate(void *map, int *key, struct counter *val)
+static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *wrap)
 {
-	u8 j;
-	u64 x, k;
+	__u8 j;
+	__u64 x, k;
+	struct event *e;
 
-	bpf_timer_start(&val->timer, nsecs, 0);
+	bpf_timer_start(&wrap->timer, nsecs, 0);
 	x = __sync_fetch_and_and(&pkt_count, 0); // atomically read then set to 0
 	k = sample_idx;
-
-	bpf_printk("count:%d", x);
-	bpf_printk("i:%d", k);
 
 	for (j = 0; j < levels; j++) {
 		if (k % 2 == 0) {
 			w[j] = x;
 			break;
-		} else {
-			bpf_printk("caclulating with %ld %ld", w[j], x);
-			if (j != 0) { // dont calculate energy for lvl 0 (signal)
-				s[j - 1] += (w[j] - x) * (w[j] - x);
+		}
+		if (j != 0) { // dont calculate energy for lvl 0 (signal)
+			s[j] += (w[j] - x) * (w[j] - x);
 
-				if (j >= 2) { // compare with prev only lvl 2 onwards
-					if (2 * alpha * s[j - 1] < beta * s[j - 2]) {
-						bpf_printk("periodicity detected lvl %ld", j);
+			if (j >= 2) { // compare with prev only lvl 2 onwards
+				if (2 * alpha * s[j] < beta * s[j - 1]) {
+					e = bpf_ringbuf_reserve(&rb, sizeof(struct event), 0);
+					if (!e) {
+						return 0;
 					}
+					e->level = j;
+					bpf_ringbuf_submit(e, 0);
 				}
 			}
-
-			x += w[j];
-			bpf_printk("result x %ld", x);
-			k >>= 1;
 		}
-	}
 
-	for (j = 1; j < levels; j++) {
-		bpf_printk(" [%d]:%ld", j, s[j - 1]);
+		x += w[j];
+		k >>= 1;
 	}
 
 	sample_idx++;
@@ -75,18 +77,16 @@ static int calculate(void *map, int *key, struct counter *val)
 SEC("xdp")
 int xdp_pass(struct xdp_md *ctx)
 {
-	void *data = (void *)(long)ctx->data;
-	void *data_end = (void *)(long)ctx->data_end;
+	/* void *data = (void *)(long)ctx->data; */
+	/* void *data_end = (void *)(long)ctx->data_end; */
+	/* int pkt_sz = data_end - data; */
 
-	int pkt_sz = data_end - data;
-
-	int key = 0;
-	struct counter *fldt = bpf_map_lookup_elem(&flow, &key);
-	if (fldt) {
+	struct timer_wrapper *wrap = bpf_map_lookup_elem(&timer_map, &timer_key);
+	if (wrap) {
 		if (!timer_was_init) {
-			bpf_timer_init(&fldt->timer, &flow, 1);
-			bpf_timer_set_callback(&fldt->timer, calculate);
-			bpf_timer_start(&fldt->timer, nsecs, 0);
+			bpf_timer_init(&wrap->timer, &timer_map, 1);
+			bpf_timer_set_callback(&wrap->timer, collect_process_sample);
+			bpf_timer_start(&wrap->timer, nsecs, 0);
 			timer_was_init = true;
 		}
 		__sync_add_and_fetch(&pkt_count, 1); // atomically increment by 1
