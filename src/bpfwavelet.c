@@ -28,6 +28,24 @@ static void sig_handler(int sig)
 	exiting = true;
 }
 
+static char *mode_name(__u32 mode_flag)
+{
+	switch (mode_flag) {
+	case XDP_FLAGS_SKB_MODE:
+		return "XDP_FLAGS_SKB_MODE";
+		break;
+	case XDP_FLAGS_DRV_MODE:
+		return "XDP_FLAGS_DRV_MODE";
+		break;
+	case XDP_FLAGS_HW_MODE:
+		return "XDP_FLAGS_HW_MODE";
+		break;
+	default:
+		return "This should not happen";
+		break;
+	}
+}
+
 void usage(char *prog_name)
 {
 	fprintf(stderr,
@@ -35,6 +53,9 @@ void usage(char *prog_name)
 		"options:\n"
 		"  -h  print help\n"
 		"  -v  use verbose output\n"
+		"  -g  generic mode (XDP_FLAGS_SKB_MODE)\n"
+		"  -d  drv mode (XDP_FLAGS_DRV_MODE)\n"
+		"  -o  offload mode (XDP_FLAGS_HW_MODE)\n"
 		"  -a  set alpha value\n"
 		"  -b  set beta value\n"
 		"  -t  set the interval (in nanoseconds) between samples\n"
@@ -60,12 +81,13 @@ int main(int argc, char **argv)
 	int prog_fd;
 	bool attached = false;
 	int c;
+	__u32 attach_mode;
 	__u64 alpha = DEFAULT_ALPHA;
 	__u64 beta = DEFAULT_BETA;
 	__u64 interval = DEFAULT_INTERVAL;
 	__u16 levels = DEFAULT_LEVELS;
 
-	while ((c = getopt(argc, argv, ":vha:b:t:l:")) != -1) {
+	while ((c = getopt(argc, argv, ":vhgdoa:b:t:l:")) != -1) {
 		switch (c) {
 		case 'v':
 			verbose = true;
@@ -73,6 +95,15 @@ int main(int argc, char **argv)
 		case 'h':
 			usage(argv[0]);
 			return 0;
+			break;
+		case 'g':
+			attach_mode = XDP_FLAGS_SKB_MODE;
+			break;
+		case 'd':
+			attach_mode = XDP_FLAGS_DRV_MODE;
+			break;
+		case 'o':
+			attach_mode = XDP_FLAGS_HW_MODE;
 			break;
 		case 'a':
 			read = sscanf(optarg, "%llu", &alpha);
@@ -135,6 +166,10 @@ int main(int argc, char **argv)
 		fprintf(stderr, "error: too many arguments supplied\n");
 		usage(argv[0]);
 		return 1;
+	} else if ((attach_mode & XDP_FLAGS_MODES) == 0) {
+		fprintf(stderr, "error: xdp mode not specified\n");
+		usage(argv[0]);
+		return 1;
 	}
 
 	ifindex = if_nametoindex(argv[optind]);
@@ -167,8 +202,12 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
+	if (verbose) {
+		fprintf(stderr, "attaching with mode %s\n", mode_name(attach_mode));
+	}
+
 	prog_fd = bpf_program__fd(skel->progs.xdp_pass);
-	err = bpf_xdp_attach(ifindex, prog_fd, XDP_FLAGS_SKB_MODE, NULL);
+	err = bpf_xdp_attach(ifindex, prog_fd, attach_mode, NULL);
 	if (err) {
 		fprintf(stderr, "error: failed to attach BPF program: %d\n", err);
 		goto cleanup;
