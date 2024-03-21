@@ -76,6 +76,7 @@ int main(int argc, char **argv)
 	struct bpfwavelet_bpf *skel;
 	struct ring_buffer *rb = NULL;
 	int err;
+	int detach_err;
 	int read;
 	int ifindex;
 	int prog_fd;
@@ -207,7 +208,7 @@ int main(int argc, char **argv)
 	}
 
 	prog_fd = bpf_program__fd(skel->progs.xdp_pass);
-	err = bpf_xdp_attach(ifindex, prog_fd, attach_mode, NULL);
+	err = bpf_xdp_attach(ifindex, prog_fd, attach_mode | XDP_FLAGS_UPDATE_IF_NOEXIST, NULL);
 	if (err) {
 		fprintf(stderr, "error: failed to attach BPF program: %d\n", err);
 		goto cleanup;
@@ -230,8 +231,12 @@ int main(int argc, char **argv)
 	}
 
 cleanup:
-	if (attached)
-		bpf_xdp_detach(ifindex, 0, NULL);
+	if (attached) {
+		detach_err = bpf_xdp_attach(ifindex, -1, attach_mode, NULL);
+		if (detach_err < 0) {
+			fprintf(stderr, "error dettaching %d", detach_err);
+		}
+	}
 
 	ring_buffer__free(rb);
 	bpfwavelet_bpf__destroy(skel);
