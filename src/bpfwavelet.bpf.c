@@ -56,12 +56,11 @@ static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *w
 
 			if (j >= 2) { // compare with prev only lvl 2 onwards
 				if (beta * s[j - 1] > 2 * alpha * s[j]) {
-					e = bpf_ringbuf_reserve(&rb, sizeof(struct event), 0);
-					if (!e) {
-						return 0;
+					e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
+					if (e) {
+						e->level = j - 1;
+						bpf_ringbuf_submit(e, 0);
 					}
-					e->level = j - 1;
-					bpf_ringbuf_submit(e, 0);
 				}
 			}
 		}
@@ -75,16 +74,12 @@ static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *w
 }
 
 SEC("xdp")
-int xdp_pass(struct xdp_md *ctx)
+int bpfwavelet(struct xdp_md *ctx)
 {
-	/* void *data = (void *)(long)ctx->data; */
-	/* void *data_end = (void *)(long)ctx->data_end; */
-	/* int pkt_sz = data_end - data; */
-
 	struct timer_wrapper *wrap = bpf_map_lookup_elem(&timer_map, &timer_key);
 	if (wrap) {
 		if (!timer_was_init) {
-			bpf_timer_init(&wrap->timer, &timer_map, 1);
+			bpf_timer_init(&wrap->timer, &timer_map, 1); // 1 = CLOCK_MONOTONIC
 			bpf_timer_set_callback(&wrap->timer, collect_process_sample);
 			bpf_timer_start(&wrap->timer, nsecs, 0);
 			timer_was_init = true;

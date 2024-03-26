@@ -66,7 +66,7 @@ void usage(char *prog_name)
 static int handle_event(void *ctx, void *data, size_t data_sz)
 {
 	const struct event *e = data;
-	printf("%hu\n", e->level);
+	printf("detection: level %hu\n", e->level);
 
 	return 0;
 }
@@ -207,7 +207,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "attaching with mode %s\n", mode_name(attach_mode));
 	}
 
-	prog_fd = bpf_program__fd(skel->progs.xdp_pass);
+	prog_fd = bpf_program__fd(skel->progs.bpfwavelet);
 	err = bpf_xdp_attach(ifindex, prog_fd, attach_mode | XDP_FLAGS_UPDATE_IF_NOEXIST, NULL);
 	if (err) {
 		fprintf(stderr, "error: failed to attach BPF program: %d\n", err);
@@ -224,6 +224,11 @@ int main(int argc, char **argv)
 		if (verbose)
 			fprintf(stderr, ".");
 		err = ring_buffer__poll(rb, 100);
+		/* Ctrl-C will cause -EINTR */
+		if (err == -EINTR) {
+			err = 0;
+			break;
+		}
 		if (err < 0) {
 			fprintf(stderr, "error polling ring buffer: %d\n", err);
 			break;
@@ -234,7 +239,7 @@ cleanup:
 	if (attached) {
 		detach_err = bpf_xdp_attach(ifindex, -1, attach_mode, NULL);
 		if (detach_err < 0) {
-			fprintf(stderr, "error dettaching %d", detach_err);
+			fprintf(stderr, "error detaching %d", detach_err);
 		}
 	}
 
