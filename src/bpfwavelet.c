@@ -5,6 +5,7 @@
 #include <linux/if_link.h> // XDP flags
 #include <net/if.h> // if_nametoindex()
 #include <signal.h> // signal()
+#include <time.h>
 #include <unistd.h> // getopt()
 
 #define DEFAULT_ALPHA	 3
@@ -66,7 +67,19 @@ void usage(char *prog_name)
 static int handle_event(void *ctx, void *data, size_t data_sz)
 {
 	const struct event *e = data;
-	printf("detection: level %hu\n", e->level);
+	struct timespec tp;
+
+	clock_gettime(CLOCK_REALTIME, &tp);
+
+	char buf[sizeof "2024-03-26T15:29:54.479-03:00"];
+	size_t bufsize = sizeof buf;
+	int off = 0;
+	struct tm *local = localtime(&tp.tv_sec);
+	off = strftime(buf, bufsize, "%FT%T", local);
+	off += snprintf(buf+off, bufsize-off, ".%03ld", tp.tv_nsec/1000000);
+	off += snprintf(buf+off, bufsize-off, "%c%02ld:%02ld", local->tm_gmtoff >= 0 ? '+' : '-', labs(local->tm_gmtoff)/3600, labs(local->tm_gmtoff)%3600/60);
+
+	printf("%s detection: level %hu\n", buf, e->level);
 
 	return 0;
 }
