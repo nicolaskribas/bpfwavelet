@@ -82,7 +82,7 @@ int main(int argc, char **argv)
 	int prog_fd;
 	bool attached = false;
 	int c;
-	__u32 attach_mode;
+	__u32 attach_mode = 0;
 	__u64 alpha = DEFAULT_ALPHA;
 	__u64 beta = DEFAULT_BETA;
 	__u64 interval = DEFAULT_INTERVAL;
