@@ -46,6 +46,14 @@ static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *w
 	x = __sync_fetch_and_and(&pkt_count, 0); // atomically read then set to 0
 	k = sample_idx;
 
+	e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
+	if (e) {
+		e->detection = false;
+		e->sample.value = x;
+		e->sample.id = sample_idx + 1;
+		bpf_ringbuf_submit(e, 0);
+	}
+
 	for (j = 0; j <= levels && j <= MAX_LEVELS; j++) {
 		if (k % 2 == 0) {
 			w[j] = x;
@@ -58,6 +66,7 @@ static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *w
 				if (beta * s[j - 1] > 2 * alpha * s[j]) {
 					e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
 					if (e) {
+						e->detection = true;
 						e->level = j - 1;
 						bpf_ringbuf_submit(e, 0);
 					}

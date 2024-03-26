@@ -79,7 +79,11 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 	off += snprintf(buf+off, bufsize-off, ".%03ld", tp.tv_nsec/1000000);
 	off += snprintf(buf+off, bufsize-off, "%c%02ld:%02ld", local->tm_gmtoff >= 0 ? '+' : '-', labs(local->tm_gmtoff)/3600, labs(local->tm_gmtoff)%3600/60);
 
-	printf("%s detection: level %hu\n", buf, e->level);
+	if (e->detection) {
+		printf("%s detection: level %hu\n", buf, e->level);
+	} else {
+		printf("%s sample: id %llu, value %llu\n", buf, e->sample.id, e->sample.value);
+	}
 
 	return 0;
 }
