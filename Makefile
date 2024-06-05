@@ -4,6 +4,7 @@ CLANG ?= clang
 LIBBPF_SRC := $(abspath libbpf/src)
 BPFTOOL_SRC := $(abspath bpftool/src)
 LIBBPF_OBJ := $(abspath $(OUTPUT)/libbpf.a)
+DEBUG_MODE_FILE := $(abspath $(OUTPUT)/debug_mode)
 BPFTOOL_OUTPUT ?= $(abspath $(OUTPUT)/bpftool)
 BPFTOOL ?= $(BPFTOOL_OUTPUT)/bootstrap/bpftool
 ARCH ?= $(shell uname -m | sed 's/x86_64/x86/' \
@@ -19,6 +20,9 @@ VMLINUX := vmlinux/$(ARCH)/vmlinux.h
 # outdated
 INCLUDES := -I$(OUTPUT) -Ilibbpf/include/uapi -I$(dir $(VMLINUX))
 CFLAGS := -g -Wall
+ifeq ($(DEBUG), 1)
+    CFLAGS += -DDEBUG
+endif
 ALL_LDFLAGS := $(LDFLAGS) $(EXTRA_LDFLAGS)
 
 APPS = bpfwavelet
@@ -80,11 +84,18 @@ $(BPFTOOL): | $(BPFTOOL_OUTPUT)
 	$(call msg,BPFTOOL,$@)
 	$(Q)$(MAKE) ARCH= CROSS_COMPILE= OUTPUT=$(BPFTOOL_OUTPUT)/ -C $(BPFTOOL_SRC) bootstrap
 
+.PHONY: force
+$(DEBUG_MODE_FILE): force | $(OUTPUT)
+	@echo '$(DEBUG)' | cmp -s - $@ || {			\
+		echo '$(DEBUG)' > $@;				\
+		echo 'Debug mode changed, rebuilding...';	\
+	}
 
 # Build BPF code
-$(OUTPUT)/%.bpf.o: $(SRC)/%.bpf.c $(LIBBPF_OBJ) $(wildcard $(SRC)/%.h) $(VMLINUX) | $(OUTPUT) $(BPFTOOL)
+.SECONDEXPANSION:
+$(OUTPUT)/%.bpf.o: $(SRC)/%.bpf.c $(LIBBPF_OBJ) $$(wildcard $(SRC)/%.h) $(VMLINUX) $(DEBUG_MODE_FILE) | $(OUTPUT) $(BPFTOOL)
 	$(call msg,BPF,$@)
-	$(Q)$(CLANG) -g -O2 -target bpf -D__TARGET_ARCH_$(ARCH)		      \
+	$(Q)$(CLANG) $(CFLAGS) -O2 -target bpf -D__TARGET_ARCH_$(ARCH)		      \
 		     $(INCLUDES) $(CLANG_BPF_SYS_INCLUDES)		      \
 		     -c $(filter $(SRC)/%.c,$^) -o $(patsubst %.bpf.o,%.tmp.bpf.o,$@)
 	$(Q)$(BPFTOOL) gen object $@ $(patsubst %.bpf.o,%.tmp.bpf.o,$@)
@@ -97,7 +108,7 @@ $(OUTPUT)/%.skel.h: $(OUTPUT)/%.bpf.o | $(OUTPUT) $(BPFTOOL)
 # Build user-space code
 $(patsubst %,$(OUTPUT)/%.o,$(APPS)): %.o: %.skel.h
 
-$(OUTPUT)/%.o: $(SRC)/%.c $(wildcard $(SRC)/%.h) | $(OUTPUT)
+$(OUTPUT)/%.o: $(SRC)/%.c $$(wildcard $(SRC)/%.h) $(DEBUG_MODE_FILE) | $(OUTPUT)
 	$(call msg,CC,$@)
 	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(filter $(SRC)/%.c,$^) -o $@
 
