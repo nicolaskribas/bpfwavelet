@@ -2,3 +2,4 @@
 -I.output
 -Ilibbpf/include/uapi
 -Ivmlinux
+-DDEBUG

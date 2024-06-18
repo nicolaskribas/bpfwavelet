@@ -4,8 +4,6 @@
 
 char __license[] SEC("license") = "GPL";
 
-#define MAX_LEVELS 256
-
 // array of lenght 1, because the timer must be inside a map
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
@@ -29,7 +27,7 @@ static const __u32 timer_key = 0;
 static bool timer_was_init = false;
 static __u64 pkt_count = 0;
 static __u64 sample_idx = 0;
-static __u64 w[MAX_LEVELS + 1] = { 0 };
+static __u64 w[MAX_LEVELS + 1] = { 0 }; // w[0] holds a sample
 static __u64 s[MAX_LEVELS + 1] = { 0 };
 
 struct timer_wrapper {
@@ -46,6 +44,10 @@ static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *w
 	x = __sync_fetch_and_and(&pkt_count, 0); // atomically read then set to 0
 	k = sample_idx;
 
+#ifdef DEBUG
+	__u64 value = x;
+#endif /* DEBUG */
+
 	for (j = 0; j <= levels && j <= MAX_LEVELS; j++) {
 		if (k % 2 == 0) {
 			w[j] = x;
@@ -58,6 +60,9 @@ static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *w
 				if (beta * s[j - 1] > 2 * alpha * s[j]) {
 					e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
 					if (e) {
+#ifdef DEBUG
+						e->is_debug = false;
+#endif /* DEBUG */
 						e->level = j - 1;
 						bpf_ringbuf_submit(e, 0);
 					}
@@ -68,6 +73,21 @@ static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *w
 		x += w[j]; // w_{j-1,0} + w_{j-1,1}
 		k >>= 1;
 	}
+
+#ifdef DEBUG
+	e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
+	if (e) {
+		e->is_debug = true;
+		e->debug.id = sample_idx + 1;
+		e->debug.value = value;
+		for (j = 0; j <= levels && j <= MAX_LEVELS; j++) {
+			e->debug.s[j] = s[j];
+			e->debug.w[j] = w[j];
+		}
+
+		bpf_ringbuf_submit(e, 0);
+	}
+#endif /* DEBUG */
 
 	sample_idx++;
 	return 0;

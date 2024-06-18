@@ -81,13 +81,37 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 			local->tm_gmtoff >= 0 ? '+' : '-', labs(local->tm_gmtoff) / 3600,
 			labs(local->tm_gmtoff) % 3600 / 60);
 
-	printf("%s detection: level %hu\n", buf, e->level);
+#ifdef DEBUG
+	__u16 levels = *(__u16 *)ctx;
+	if (e->is_debug) {
+		printf("%s debug id %llu value %llu\n", buf, e->debug.id, e->debug.value);
+
+		printf("w: ");
+		for (int j = 0; j <= levels && j <= MAX_LEVELS; j++) {
+			printf("%llu ", e->debug.w[j]);
+		}
+		printf("\ns: ");
+		for (int j = 0; j <= levels && j <= MAX_LEVELS; j++) {
+			printf("%llu ", e->debug.s[j]);
+		}
+		printf("\n");
+		return 0;
+	}
+#endif /* DEBUG */
+
+	printf("%s detected level %hu\n", buf, e->level);
 
 	return 0;
 }
 
 int main(int argc, char **argv)
 {
+	setlinebuf(stdout);
+
+#ifdef DEBUG
+	fprintf(stderr, "bpfwavelet was compiled with debug code\n");
+#endif /* DEBUG */
+
 	struct bpfwavelet_bpf *skel;
 	struct ring_buffer *rb = NULL;
 	int err;
@@ -211,7 +235,7 @@ int main(int argc, char **argv)
 	skel->bss->nsecs = interval;
 	skel->bss->levels = levels;
 
-	rb = ring_buffer__new(bpf_map__fd(skel->maps.rb), handle_event, NULL, NULL);
+	rb = ring_buffer__new(bpf_map__fd(skel->maps.rb), handle_event, &levels, NULL);
 	if (!rb) {
 		err = -1;
 		fprintf(stderr, "failed to create ring buffer\n");
