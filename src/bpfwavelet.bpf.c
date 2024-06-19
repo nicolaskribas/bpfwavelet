@@ -53,19 +53,17 @@ static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *w
 			w[j] = x;
 			break;
 		}
-		if (j != 0) { // dont calculate energy for lvl 0 (signal)
-			s[j] += (w[j] - x) * (w[j] - x); // s_j <- s_j + (w_{j-1,0} - w_{j-1,1})^2
+		s[j] += (w[j] - x) * (w[j] - x); // s_j <- s_j + (w_{j-1,0} - w_{j-1,1})^2
 
-			if (j >= 2) { // compare with prev only lvl 2 onwards
-				if (beta * s[j - 1] > 2 * alpha * s[j]) {
-					e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
-					if (e) {
+		if (j >= 1) { // compare with prev only lvl 1 onwards
+			if (beta * s[j - 1] > 2 * alpha * s[j]) {
+				e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
+				if (e) {
 #ifdef DEBUG
-						e->is_debug = false;
+					e->is_debug = false;
 #endif /* DEBUG */
-						e->level = j - 1;
-						bpf_ringbuf_submit(e, 0);
-					}
+					e->level = j;
+					bpf_ringbuf_submit(e, 0);
 				}
 			}
 		}

@@ -7,7 +7,7 @@ alpha = 3
 beta = 2
 
 
-def detect_with_online_calculated_s(s):
+def detect_with_s(s):
     detected = []
     for j in range(1, len(s)):
         if beta * s[j - 1] > 2 * alpha * s[j]:
@@ -15,12 +15,29 @@ def detect_with_online_calculated_s(s):
     return detected
 
 
-def detect_with_offline_calculated_energy(e):
+def detect_energy(e):
     detected = []
     for j in range(1, len(e)):
         if beta * e[j - 1] > alpha * e[j]:
             detected.append(j)
     return detected
+
+
+def calculate_s(samples):
+    a = [samples]
+    for j in range(1, len(samples).bit_length()):
+        aj = []
+        for k in range(0, len(a[j - 1]) // 2):
+            aj.append(a[j - 1][2 * k] + a[j - 1][2 * k + 1])
+        a.append(aj)
+
+    s = []
+    for j in range(1, len(samples).bit_length()):
+        acc = 0
+        for k in range(0, len(a[j - 1]) // 2):
+            acc += (a[j - 1][2 * k] - a[j - 1][2 * k + 1]) ** 2
+        s.append(acc)
+    return s
 
 
 def energy(d):
@@ -31,17 +48,22 @@ def double_check(samples: list[int], _: list[int], s: list[int]):
     d = pywt.wavedec(samples, "haar")[:0:-1]
     e = energy(d)
     dwt_max_level = len(samples).bit_length() - 1
+    offline_s = calculate_s(samples)
 
-    print("sample", len(samples))
+    print(len(samples), "samples:", samples)
     print("can calculate", dwt_max_level, "decomposition levels")
     print()
-    print("offline")
+    print("offline full dwt")
     print("energy:", e)
-    print("detected:", detect_with_offline_calculated_energy(e))
+    print("detected:", detect_energy(e))
     print()
-    print("online s")
-    print("s:", s[1 : dwt_max_level + 1])
-    print("detected:", detect_with_online_calculated_s(s[1 : dwt_max_level + 1]))
+    print("offline with simplification")
+    print("s:", offline_s)
+    print("detected:", detect_with_s(offline_s))
+    print()
+    print("online (with simplification)")
+    print("s:", s[0:dwt_max_level])
+    print("detected:", detect_with_s(s[0:dwt_max_level]))
     print("------------------------")
 
 
