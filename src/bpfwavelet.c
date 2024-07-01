@@ -57,11 +57,11 @@ void usage(char *prog_name)
 		"  -g  generic mode (XDP_FLAGS_SKB_MODE)\n"
 		"  -d  drv mode (XDP_FLAGS_DRV_MODE)\n"
 		"  -o  offload mode (XDP_FLAGS_HW_MODE)\n"
-		"  -a  set alpha value\n"
-		"  -b  set beta value\n"
-		"  -t  set the interval (in nanoseconds) between samples\n"
-		"  -l  set the number of decomposition levels\n",
-		prog_name);
+		"  -a <integer> set alpha value (defaults to %d)\n"
+		"  -b <integer> set beta value (defaults to %d)\n"
+		"  -t <integer> set the interval (in nanoseconds) between samples (defaults to %d)\n"
+		"  -l <integer> set the number of decomposition levels (defaults to %d)\n",
+		prog_name, DEFAULT_ALPHA, DEFAULT_BETA, DEFAULT_INTERVAL, DEFAULT_LEVELS);
 }
 
 static int handle_event(void *ctx, void *data, size_t data_sz)
