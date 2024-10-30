@@ -1,3 +1,12 @@
-[tool.pyright]
-venv = ".venv"
-venvPath = "."
+[project]
+name = "bpfwavelet"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "itables>=2.2.2",
+    "pandas>=2.2.3",
+    "pywavelets>=1.7.0",
+    "seaborn>=0.13.2",
+]

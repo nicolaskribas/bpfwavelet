@@ -1,0 +1,26 @@
+#!/bin/sh
+
+script_location="$(dirname "$(realpath "$0")")"
+bpfwavelet_pcap_bin="${script_location}/../bpfwavelet_pcap"
+mkdir -p "${script_location}/results"
+
+test() {
+	capture="$1"
+	filter="$2"
+	parameters="$3"
+
+	logfile="${script_location}/results/$(basename --suffix=.pcap "$capture")_$(echo "$filter" | tr -d '[:blank:]')_$(echo "$parameters" | tr -d '[:blank:]')"
+
+	tcpdump -r "$capture" -w - "$filter" | "$bpfwavelet_pcap_bin" -v $parameters >"$logfile" &
+}
+
+test captures/cobalt-strike.pcap  '' '-t 250000000'
+
+test captures/trickbot-a.pcap '' '-t 250000000'
+
+test captures/trickbot-b.pcap '' '-t 250000000'
+
+test captures/heartbleed.pcap '' '-t 250000000'
+
+echo waiting for $(jobs -p)
+wait $(jobs -p)

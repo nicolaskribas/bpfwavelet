@@ -1,0 +1,43 @@
+#!/bin/sh
+#
+# This script wraps bpfwavelet for testing its functionality.
+# It expects a pcap coming from stdin, the capture is then replayed through a
+# virtual interface where bpfwavelet is running, the detected periodicities are
+# then printed. Arguments to the script are, in reality, arguments to bpfwavelet
+# and are passed directly to it. Arguments for XDP attachment mode and interface
+# are already specified in the script, so do not use `-g`, `-o`, and `-d` flags.
+#
+# Usage example:
+# `tcpdump -r capture.pcap -w - 'tcp port 49705' | sudo ./bpfwavelet_pcap` -v -t 100000000 -l 32`
+
+finish() {
+	[ -n "$NS" ] && ip netns delete "$NS" >&2
+	unset NS
+}
+trap finish INT TERM EXIT
+
+bpfwavelet_bin="$(dirname "$(realpath "$0")")"/bpfwavelet
+if [ ! -x "$bpfwavelet_bin" ]; then
+	echo "$bpfwavelet_bin not found" >&2
+	exit 1
+fi
+
+NS="$(mktemp --dry-run XXX)" # generate a random name to use as network namespace
+ip netns add "$NS" >&2
+
+VETH0='veth0'
+VETH1='veth1'
+ip netns exec "$NS" ip link add "$VETH0" type veth peer name "$VETH1" >&2
+ip netns exec "$NS" ip link set "$VETH0" up >&2
+ip netns exec "$NS" ip link set "$VETH1" up >&2
+
+# run bpfwavelet in the background with the script arguments
+ip netns exec "$NS" "$bpfwavelet_bin" -d "$VETH1" "$@" &
+bpfwavelet_pid="$!"
+
+sleep 5
+
+# read pcap from stdin and replay it
+ip netns exec "$NS" tcpreplay --preload-pcap -i "$VETH0" - <&0 >&2
+
+kill "$bpfwavelet_pid"

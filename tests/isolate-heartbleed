@@ -1,0 +1,40 @@
+#!/bin/sh
+
+# Isolate the traffic where Heartbleed happens in Wednesday-workingHours.pcap capture
+#
+# References
+# https://www.scitepress.org/Papers/2018/66398/66398.pdf
+# https://www.unb.ca/cic/datasets/ids-2017.html
+
+if [ ! -e Wednesday-workingHours.pcap ]; then
+	echo 'Wednesday-workingHours.pcap not found. Downloading it...'
+	curl 'http://205.174.165.80/CICDataset/CIC-IDS-2017/Dataset/CIC-IDS-2017/PCAPs/Wednesday-workingHours.pcap'
+fi
+
+# 2936765 packets
+# tcpdump -rWednesday-workingHours.pcap 'host 205.174.165.73 or host 205.174.165.66 or host 192.168.10.51 or host 205.174.165.80 or host 172.16.0.11 or host 172.16.0.1' -w Wednesday-workingHours-Heartbleed.pcap &
+
+# this generates an empty trace, there is no IP 205.174.165.73 in use
+# tcpdump -rWednesday-workingHours.pcap 'host 205.174.165.73                                                                                                           ' -w Wednesday-workingHours-Attacker-host_205.174.165.73.pcap &
+
+# this generates a trace with 6 unanswered ICMP ping requests, not even in the interval were Heartbleed happens
+# tcpdump -rWednesday-workingHours.pcap '                       host 205.174.165.66                                                                                    ' -w Wednesday-workingHours-Victim-host_205.174.165.66.pcap &
+
+# 483261 packets
+# tcpdump -rWednesday-workingHours.pcap '                                              host 192.168.10.51                                                              ' -w Wednesday-workingHours-Victim-Local-host_192.168.10.51.pcap &
+
+# this generates an empty trace, there is no IP 205.174.165.80 in use
+# tcpdump -rWednesday-workingHours.pcap '                                                                    host 205.174.165.80                                       ' -w Wednesday-workingHours-Valid-Ip-Firewall_host_205.174.165.80.pcap &
+
+# this generates an empty trace, there is no IP 172.16.0.11 in use
+# tcpdump -rWednesday-workingHours.pcap '                                                                                           host 172.16.0.11                   ' -w Wednesday-workingHours-host_172.16.0.11.pcap &
+
+# 2568019 packets
+# tcpdump -rWednesday-workingHours.pcap '                                                                                                               host 172.16.0.1' -w Wednesday-workingHours-host_172.16.0.1.pcap &
+
+# editcap   Wednesday-workingHours.pcap -A 1499278320 -B 1499279564                                                                                                         Wednesday-workingHours-A_1499278320_B_1499279564.pcap &
+
+# Heartbleed isolated
+editcap   Wednesday-workingHours.pcap -A 1499278320 -B 1499279564 - | tcpdump -r- 'host 192.168.10.51 and host 172.16.0.1' -w- | tcprewrite --mtu-trunc -i - -o captures/heartbleed.pcap &
+
+wait $(jobs -p)
