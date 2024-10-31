@@ -57,6 +57,7 @@ void usage(char *prog_name)
 		"  -g  generic mode (XDP_FLAGS_SKB_MODE)\n"
 		"  -d  drv mode (XDP_FLAGS_DRV_MODE)\n"
 		"  -o  offload mode (XDP_FLAGS_HW_MODE)\n"
+		"  -r  reflects traffic back to the same interface (use XDP_TX instead of XDP_PASS)\n"
 		"  -a <integer> set alpha value (defaults to %d)\n"
 		"  -b <integer> set beta value (defaults to %d)\n"
 		"  -t <integer> set the interval (in nanoseconds) between samples (defaults to %d)\n"
@@ -126,8 +127,9 @@ int main(int argc, char **argv)
 	__u64 beta = DEFAULT_BETA;
 	__u64 interval = DEFAULT_INTERVAL;
 	__u16 levels = DEFAULT_LEVELS;
+	bool reflect = false;
 
-	while ((c = getopt(argc, argv, ":vhgdoa:b:t:l:")) != -1) {
+	while ((c = getopt(argc, argv, ":vhgdora:b:t:l:")) != -1) {
 		switch (c) {
 		case 'v':
 			verbose = true;
@@ -144,6 +146,9 @@ int main(int argc, char **argv)
 			break;
 		case 'o':
 			attach_mode = XDP_FLAGS_HW_MODE;
+			break;
+		case 'r':
+			reflect = true;
 			break;
 		case 'a':
 			read = sscanf(optarg, "%llu", &alpha);
@@ -224,16 +229,22 @@ int main(int argc, char **argv)
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
 
-	skel = bpfwavelet_bpf__open_and_load();
+	skel = bpfwavelet_bpf__open();
 	if (skel == NULL) {
 		err = -1;
 		fprintf(stderr, "error: failed to open or load BPF program. %s\n", strerror(errno));
 		goto cleanup;
 	}
-	skel->bss->alpha = alpha;
-	skel->bss->beta = beta;
-	skel->bss->nsecs = interval;
-	skel->bss->levels = levels;
+	skel->rodata->alpha = alpha;
+	skel->rodata->beta = beta;
+	skel->rodata->nsecs = interval;
+	skel->rodata->levels = levels;
+	skel->rodata->reflect = reflect;
+	err = bpfwavelet_bpf__load(skel);
+	if (err) {
+		fprintf(stderr, "error: failed to load and verify BPF skeleton\n");
+		goto cleanup;
+	}
 
 	rb = ring_buffer__new(bpf_map__fd(skel->maps.rb), handle_event, &levels, NULL);
 	if (!rb) {

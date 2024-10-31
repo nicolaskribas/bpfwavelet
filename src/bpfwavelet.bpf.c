@@ -4,7 +4,7 @@
 
 char __license[] SEC("license") = "GPL";
 
-// array of lenght 1, because the timer must be inside a map
+// array of length 1, because the timer must be inside a map
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__uint(max_entries, 1);
@@ -18,10 +18,11 @@ struct {
 } rb SEC(".maps");
 
 // this variables are set in the userspace code
-__u64 alpha;
-__u64 beta;
-__u64 nsecs;
-__u16 levels;
+const volatile __u64 alpha;
+const volatile __u64 beta;
+const volatile __u64 nsecs;
+const volatile __u16 levels;
+const volatile bool reflect;
 
 static const __u32 timer_key = 0;
 static bool timer_was_init = false;
@@ -33,6 +34,22 @@ static __u64 s[MAX_LEVELS + 1] = { 0 };
 struct timer_wrapper {
 	struct bpf_timer timer;
 };
+
+static __always_inline void swap_src_dst_mac(void *data)
+{
+	unsigned short *p = data;
+	unsigned short dst[3];
+
+	dst[0] = p[0];
+	dst[1] = p[1];
+	dst[2] = p[2];
+	p[0] = p[3];
+	p[1] = p[4];
+	p[2] = p[5];
+	p[3] = dst[0];
+	p[4] = dst[1];
+	p[5] = dst[2];
+}
 
 static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *wrap)
 {
@@ -94,6 +111,11 @@ static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *w
 SEC("xdp")
 int bpfwavelet(struct xdp_md *ctx)
 {
+	void *data_end = (void *)(long)ctx->data_end;
+	void *data = (void *)(long)ctx->data;
+	struct ethhdr *eth = data;
+	__u64 nh_off = sizeof(*eth);
+
 	struct timer_wrapper *wrap = bpf_map_lookup_elem(&timer_map, &timer_key);
 	if (wrap) {
 		if (!timer_was_init) {
@@ -103,6 +125,14 @@ int bpfwavelet(struct xdp_md *ctx)
 			timer_was_init = true;
 		}
 		__sync_add_and_fetch(&pkt_count, 1); // atomically increment by 1
+	}
+
+	if (reflect) {
+		if (data + nh_off > data_end)
+			return XDP_ABORTED;
+
+		swap_src_dst_mac(data);
+		return XDP_TX;
 	}
 
 	return XDP_PASS;

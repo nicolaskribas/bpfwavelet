@@ -1,4 +1,4 @@
-# bpfwavelet: periodicity detection using discrete wavelet transform in BPF
+# bpfwavelet: periodicity detection using discrete wavelet transform in eBPF
 
 # Building
 
@@ -32,8 +32,12 @@ bpfwavelet [options] <ifname>
 options:
   -h  print help
   -v  use verbose output
-  -a  set alpha value
-  -b  set beta value
-  -t  set the interval (in nanoseconds) between samples
-  -l  set the number of decomposition levels
+  -g  generic mode (XDP_FLAGS_SKB_MODE)
+  -d  drv mode (XDP_FLAGS_DRV_MODE)
+  -o  offload mode (XDP_FLAGS_HW_MODE)
+  -r  reflects traffic back to the same interface (use XDP_TX instead of XDP_PASS)
+  -a <integer> set alpha value (defaults to 3)
+  -b <integer> set beta value (defaults to 2)
+  -t <integer> set the interval (in nanoseconds) between samples (defaults to 1000000000)
+  -l <integer> set the number of decomposition levels (defaults to 17)
 ```
