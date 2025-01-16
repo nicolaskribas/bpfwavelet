@@ -1,32 +1,28 @@
 #!/bin/bash
-
-full_script_path=$(readlink -e ${0})
-tgen_dir=$(dirname ${full_script_path})
+# modified from https://github.com/perftool-incubator/bench-trafficgen/blob/main/trafficgen/install-trex.sh
 
 base_dir="/opt/trex"
 tmp_dir="/tmp"
-trex_ver="v2.87"
+trex_ver="v3.06"
 insecure_curl=0
 force_install=0
-toolbox_url=https://github.com/perftool-incubator/toolbox.git
 
-opts=$(getopt -q -o c: --longoptions "tmp-dir:,base-dir:,version:,insecure,force" -n "getopt.sh" -- "$@")
-if [ $? -ne 0 ]; then
-	printf -- "$*\n"
+if ! opts=$(getopt -q -o c: --longoptions "tmp-dir:,base-dir:,version:,insecure,force" -n "getopt.sh" -- "$@"); then
+	printf -- "%s\n" "$*"
 	printf -- "\n"
 	printf -- "\tThe following options are available:\n\n"
 	printf -- "\n"
 	printf -- "--tmp-dir=str\n"
 	printf -- "  Directory where temporary files should be stored.\n"
-	printf -- "  Default is ${tmp_dir}\n"
+	printf -- "  Default is %s\n" "${tmp_dir}"
 	printf -- "\n"
 	printf -- "--base-dir=str\n"
 	printf -- "  Directory where TRex will be installed.\n"
-	printf -- "  Default is ${base_dir}\n"
+	printf -- "  Default is %s\n" "${base_dir}"
 	printf -- "\n"
 	printf -- "--version=str\n"
 	printf -- "  Version of TRex to install\n"
-	printf -- "  Default is ${trex_ver}\n"
+	printf -- "  Default is %s\n" "${trex_ver}"
 	printf -- "\n"
 	printf -- "--insecure\n"
 	printf -- "  Disable SSL cert verification for the TRex download site.\n"
@@ -37,7 +33,10 @@ if [ $? -ne 0 ]; then
 	printf -- "  Download and install TRex even if it is already present.\n"
 	exit 1
 fi
+
 eval set -- "$opts"
+unset opts
+
 while true; do
 	case "${1}" in
 	--tmp-dir)
@@ -84,27 +83,27 @@ done
 trex_url=https://trex-tgn.cisco.com/trex/release/${trex_ver}.tar.gz
 trex_dir="${base_dir}/${trex_ver}"
 
-if [ -d ${trex_dir} -a "${force_install}" == "0" ]; then
+if [ -d "${trex_dir}" ] && [ "${force_install}" == "0" ]; then
 	echo "TRex ${trex_ver} already installed"
 else
-	if [ -d ${trex_dir} ]; then
-		/bin/rm -Rf ${trex_dir}
+	if [ -d "${trex_dir}" ]; then
+		/bin/rm -Rf "${trex_dir}"
 	fi
 
-	mkdir -p ${base_dir}
-	if pushd ${base_dir} >/dev/null; then
+	mkdir -p "${base_dir}"
+	if pushd "${base_dir}" >/dev/null; then
 		tarfile="${tmp_dir}/${trex_ver}.tar.gz"
-		/bin/rm -f ${tarfile}
+		/bin/rm -f "${tarfile}"
 		curl_args=""
 		if [ "${insecure_curl}" == "1" ]; then
 			curl_args="-k"
 		fi
 		echo "Downloading TRex ${trex_ver} from ${trex_url}..."
-		curl ${curl_args} --silent --output ${tarfile} ${trex_url}
+		curl ${curl_args} --silent --output "${tarfile}" "${trex_url}"
 		curl_rc=$?
 		if [ "${curl_rc}" == "0" ]; then
-			if tar zxf ${tarfile}; then
-				/bin/rm ${tarfile}
+			if tar -xzf "${tarfile}"; then
+				/bin/rm "${tarfile}"
 				echo "installed TRex ${trex_ver} from ${trex_url}"
 			else
 				echo "ERROR: could not unpack ${tarfile} for TRex ${trex_ver}"
@@ -128,25 +127,8 @@ fi
 
 # we need a symlink so our trex scripts can always point to
 # same location for trex
-if pushd ${base_dir} >/dev/null; then
+if pushd "${base_dir}" >/dev/null; then
 	/bin/rm -f current 2>/dev/null
-	ln -sf ${trex_ver} current
+	ln -sf "${trex_ver}" current
 	popd >/dev/null
-fi
-
-if [ ! -d ${tgen_dir}/toolbox ]; then
-	if pushd ${tgen_dir} >/dev/null; then
-		echo "Installing toolbox..."
-		git clone ${toolbox_url}
-
-		popd >/dev/null
-	fi
-else
-	if pushd ${tgen_dir}/toolbox >/dev/null; then
-		echo "Updating toolbox..."
-		git fetch --all
-		git pull --ff-only
-
-		popd >/dev/null
-	fi
 fi
