@@ -105,6 +105,14 @@ else
 			if tar -xzf "${tarfile}"; then
 				/bin/rm "${tarfile}"
 				echo "installed TRex ${trex_ver} from ${trex_url}"
+
+				if pushd "${base_dir}/${trex_ver}" >/dev/null; then
+					if tar -xzf "trex_client_${trex_ver}.tar.gz"; then
+						echo "extracted client"
+					fi
+					popd >/dev/null
+				fi
+
 			else
 				echo "ERROR: could not unpack ${tarfile} for TRex ${trex_ver}"
 				exit 1
