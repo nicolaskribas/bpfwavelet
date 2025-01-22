@@ -99,7 +99,7 @@ else
 			curl_args="-k"
 		fi
 		echo "Downloading TRex ${trex_ver} from ${trex_url}..."
-		curl ${curl_args} --silent --output "${tarfile}" "${trex_url}"
+		curl ${curl_args} --retry 3 --retry-all-errors --silent --output "${tarfile}" "${trex_url}"
 		curl_rc=$?
 		if [ "${curl_rc}" == "0" ]; then
 			if tar -xzf "${tarfile}"; then
