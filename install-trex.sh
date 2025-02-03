@@ -1,4 +1,7 @@
 #!/bin/bash
+set -Eeuo pipefail
+trap 'echo "$0: Error on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
+
 # modified from https://github.com/perftool-incubator/bench-trafficgen/blob/main/trafficgen/install-trex.sh
 
 base_dir="/opt/trex"
@@ -99,9 +102,7 @@ else
 			curl_args="-k"
 		fi
 		echo "Downloading TRex ${trex_ver} from ${trex_url}..."
-		curl ${curl_args} --retry 3 --retry-all-errors --silent --output "${tarfile}" "${trex_url}"
-		curl_rc=$?
-		if [ "${curl_rc}" == "0" ]; then
+		if curl ${curl_args} --retry 3 --retry-all-errors --silent --output "${tarfile}" "${trex_url}"; then
 			if tar -xzf "${tarfile}"; then
 				/bin/rm "${tarfile}"
 				echo "installed TRex ${trex_ver} from ${trex_url}"
@@ -118,6 +119,7 @@ else
 				exit 1
 			fi
 		else
+			curl_rc=$?
 			if [ "${curl_rc}" == "60" ]; then
 				echo "ERROR: SSL certificate failed validation on TRex download.  Run --help and see --insecure option"
 				exit 1
