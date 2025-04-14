@@ -21,4 +21,4 @@ echo 0 >/sys/devices/system/cpu/cpufreq/boost
 echo 1 | tee /sys/devices/system/cpu/cpu*/cpuidle/state*/disable >/dev/null
 
 # set scaling governor to performance
-echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null || true
+echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null || true # some cores may not be available because we disabled SMT, so we accept errors in this line with the "or true"

@@ -11,6 +11,11 @@ Install TRex to `/opt/trex`.
 ./install-trex.sh --insecure
 ```
 
+Enable hugepages
+```sh
+./enable-hugepages.sh
+```
+
 Now, disable simultaneous multithreading (SMT), boost and C-states, and set
 scaling governor to performance.
 
@@ -30,4 +35,15 @@ popd
 
 ```sh
 ./run-bench
+```
+
+You can run the benchmark script in the same machine where TRex is running or
+you can forward the ports to it and run the scrip locally:
+
+```sh
+ssh -L 4501:localhost:4501 -L 4500:localhost:4500 <trexserver>
+```
+
+```sh
+./t-rex-64 -i -c 14
 ```

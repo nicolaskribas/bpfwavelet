@@ -1,89 +1,49 @@
-# from trex_stl_lib.api import *
-import trex_stl_lib.api as trex
 import argparse
+from os import path
 
-
-# split the range of IP to cores
-# add tunable by fsize to change the size of the frame
-# latency frame is always 64
-# trex>start -f stl/udp_1pkt_src_ip_split_latency.py -t fsize=64 -m 30% --port 0 --force
-#
-#
+import trex_stl_lib.api as trex
+from trex_stl_lib.api import IP, UDP, Ether
 
 
 class STLS1(object):
-    def __init__(self):
-        self.fsize = 64
-        self.lfsize = 64
-
-    def create_stream(self, dir, port_id):
+    def create_stream(self, pkt_len):
         # Create base packet and pad it to size
-        size = self.fsize - 4  # HW will add 4 bytes ethernet FCS
+        size = pkt_len - 4  # HW will add 4 bytes Ethernet FCS
 
-        if dir == 0:
-            src_ip = "16.0.0.1"
-            dst_ip = "48.0.0.1"
-        else:
-            src_ip = "48.0.0.1"
-            dst_ip = "16.0.0.1"
+        base_pkt = Ether() / IP() / UDP()
+        pad = "x" * max(0, size - len(base_pkt))
 
-        base_pkt = Ether() / IP(src=src_ip, dst=dst_ip) / UDP(dport=12, sport=1025)
-
-        pad = max(0, size - len(base_pkt)) * "x"
-        pad_latency = max(0, (self.lfsize - 4) - len(base_pkt)) * "x"
-
-        vm = trex.STLScVmRaw(
+        streams = trex.STLProfile(
             [
-                trex.STLVmFlowVar(
-                    "ip_src",
-                    min_value="10.0.0.1",
-                    max_value="10.0.0.255",
-                    size=4,
-                    step=1,
-                    op="inc",
+                trex.STLStream(
+                    packet=trex.STLPktBuilder(pkt=base_pkt / pad),
+                    mode=trex.STLTXCont(pps=1),
                 ),
-                trex.STLVmWrFlowVar(
-                    fv_name="ip_src", pkt_offset="IP.src"
-                ),  # write ip to packet IP.src
-                trex.STLVmFixIpv4(offset="IP"),  # fix checksum
-            ],
-            cache_size=255,  # the cache size
+                trex.STLStream(
+                    packet=trex.STLPktBuilder(pkt=base_pkt / pad),
+                    mode=trex.STLTXCont(pps=1000),
+                    flow_stats=trex.STLFlowLatencyStats(pg_id=1),
+                ),
+            ]
         )
-        pkt = STLPktBuilder(pkt=base_pkt / pad, vm=vm)
-        stream = [
-            STLStream(packet=pkt, mode=STLTXCont(pps=1)),
-            # latency stream
-            STLStream(
-                packet=STLPktBuilder(pkt=base_pkt / pad_latency),
-                mode=STLTXCont(pps=1000),
-                flow_stats=STLFlowLatencyStats(pg_id=12 + port_id),
-            ),
-        ]
-        return stream
+
+        return streams
 
     def get_streams(self, direction, tunables, **kwargs):
         parser = argparse.ArgumentParser(
-            description="Argparser for {}".format(os.path.basename(__file__)),
+            description="Argparser for {}".format(path.basename(__file__)),
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         )
         parser.add_argument(
-            "--fsize",
+            "--size",
             type=int,
             default=64,
             help="The packets size in the regular stream",
         )
-        parser.add_argument(
-            "--lfsize",
-            type=int,
-            default=64,
-            help="The packets size in the latency stream",
-        )
         args = parser.parse_args(tunables)
-        self.fsize = args.fsize
-        self.lfsize = args.lfsize
-        return self.create_stream(direction, kwargs["port_id"])
+        return self.create_stream(pkt_len=args.size)
 
 
-# dynamic load - used for trex console or simulator
+# dynamic load - used for TRex console or simulator
 def register():
     return STLS1()
