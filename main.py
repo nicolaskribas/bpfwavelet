@@ -8,7 +8,20 @@ sys.path.append("/opt/trex/current/trex_client/interactive")
 import trex.stl.api as trex
 
 
-def get_full_stats(client: trex.STLClient, ports: set[str]):
+"""
+Design
+======
+
+It loads the --profile and add it to the even --ports.
+To measure, wait for --wait seconds, start transmitting for --duration.
+It waits --delay after the end of transmission.
+It checks if loss is either above or bellow the --threshold to adjust the
+binary search. When difference between lower and upper bound is less then
+--precision then it stops and the result is recorded to --results file.
+"""
+
+
+def get_full_stats(client: trex.STLClient, ports: set[str]) -> dict:
     return {
         "stats": client.get_stats(list(ports)),
         "xstats": {port: client.get_xstats(int(port)) for port in ports},
@@ -17,10 +30,13 @@ def get_full_stats(client: trex.STLClient, ports: set[str]):
     }
 
 
-def measure(client: trex.STLClient, ports: list[str], duration_s: int, rate: str):
-    duration_timeout_s = duration_s * 2
-    rx_delay_ms = 200
-
+def measure(
+    client: trex.STLClient,
+    ports: list[str],
+    duration_s: int,
+    rx_delay_ms: int,
+    rate: str,
+) -> dict:
     client.clear_stats(
         ports=list(set(ports)),
         clear_global=True,
@@ -32,12 +48,14 @@ def measure(client: trex.STLClient, ports: list[str], duration_s: int, rate: str
     client.start(ports[::2], mult=rate, duration=duration_s)
     start_time_ns = time.monotonic_ns()
 
+    duration_timeout_s = math.ceil(1.1 * duration_s)  # Timeout is 110% of the duration
+
     try:
         client.wait_on_traffic(timeout=duration_timeout_s, rx_delay_ms=rx_delay_ms)
-        stoped_early = False
+        stopped_early = False
     except trex.TRexTimeoutError:
         client.stop(ports[::2], rx_delay_ms=rx_delay_ms)
-        stoped_early = True
+        stopped_early = True
     finally:
         actual_duration_ns = time.monotonic_ns() - start_time_ns
 
@@ -57,7 +75,7 @@ def measure(client: trex.STLClient, ports: list[str], duration_s: int, rate: str
         "duration_timeout_ms": duration_timeout_s * 1000,
         "actual_duration_ms": actual_duration_ns / 1000000,
         "rx_delay_ms": rx_delay_ms,
-        "stoped_early": stoped_early,
+        "stopped_early": stopped_early,
         **stats,
     }
 
@@ -67,40 +85,46 @@ def ndr(
     ports: list[str],
     precision: float,
     threshold: float,
+    wait_time_s: int,
     duration_s: int,
-):
+    rx_delay_ms: int,
+) -> list[dict]:
     log = []
+    iteration: int = 0
 
     # get the maximum transmission speed of TRex to use as upper bound, this also warms up the system
-    warmup_result = measure(client, ports, duration_s, rate="100%")
+    warmup_result = measure(client, ports, duration_s, rx_delay_ms, rate="100%")
+
+    warmup_tx_bits = warmup_result["stats"]["total"]["obytes"] * 8
+    warmup_duration_s = warmup_result["actual_duration_ms"] / 1000
+
+    lower_bps: int = 0
+    upper_bps: int = math.floor(warmup_tx_bits / warmup_duration_s)
+
     warmup_stats = {
-        "iteration": 0,
-        "lower_bps": 0,
-        "upper_bps": 0,
+        "iteration": iteration,
+        "lower_bps": lower_bps,
+        "upper_bps": upper_bps,
         **warmup_result,
     }
     log.append(warmup_stats)
 
-    # use max tx from first measure as upper bound
-    lower_bps: int = 0
-    upper_bps: int = math.floor(
-        (warmup_stats["stats"]["total"]["obytes"] * 8)
-        / (warmup_stats["actual_duration_ms"] / 1000)
-    )
-    # upper_bps: int = math.floor(
-    #     (warmup_stats["stats"]["total"]["obytes"] * 8) / duration_s
-    # )
-
-    iteration: int = 0
     while (upper_bps - lower_bps) > precision:
         iteration += 1
 
         # Calculate middle point
         rate_bps = math.floor((lower_bps + upper_bps) / 2)
+        rate_str = str(rate_bps) + "bps"
 
         # Wait then run
-        time.sleep(5)
-        result = measure(client, ports, duration_s, rate=str(rate_bps) + "bps")
+        time.sleep(wait_time_s)
+        result = measure(client, ports, duration_s, rx_delay_ms, rate=rate_str)
+
+        # Adjust bounds
+        if result["lost_percentage"] > threshold:
+            upper_bps = rate_bps
+        else:
+            lower_bps = rate_bps
 
         # Log
         stats = {
@@ -111,21 +135,10 @@ def ndr(
         }
         log.append(stats)
 
-        print(f"iteration: {iteration}")
-        print(f"lower_bps: {lower_bps} upper_bps: {upper_bps}")
-        print(f"lost: {stats['lost']} lost_percentage: {stats['lost_percentage']}")
-
-        # Adjust bounds
-        if stats["lost_percentage"] > threshold:
-            upper_bps = rate_bps
-        else:
-            lower_bps = rate_bps
-
-    # ndr = lower_bps
     return log
 
 
-def port_list(astring):
+def port_list(astring) -> list[str]:
     ports = [port.strip() for port in astring.split(",")]
 
     if len(ports) % 2 != 0:
@@ -158,19 +171,35 @@ def get_args():
         "--precision",
         type=float,
         default=100,
-        help="precision in bps of the rate (default: %(default)s)",
+        help="precision in bytes per second of the rate (default: %(default)s)",
     )
     parser.add_argument(
         "--profile",
         type=str,
-        default="udp_1pkt_simple.py",
+        default="bench_profile.py",
         help="path to python file with the traffic profile (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--wait",
+        type=int,
+        default=5,
+        help="duration in seconds to wait before each iteration (default: %(default)s)",
     )
     parser.add_argument(
         "--duration",
         type=int,
         default=30,
         help="duration in seconds of each iteration (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--delay",
+        type=int,
+        default=200,
+        help="""
+        time to wait (in milliseconds) after last packet was sent, until RX filters used for measuring flow statistics and latency are removed.
+        This value should reflect the time it takes packets which were transmitted to arrive to the destination.
+        After this time, RX filters will be removed, and packets arriving for per flow statistics feature and latency flows will be counted as errors (default: %(default)s)
+        """,
     )
     parser.add_argument(
         "--results",
@@ -201,7 +230,15 @@ if __name__ == "__main__":
     try:
         client.reset()
         client.add_streams(streams=profile, ports=args.ports[::2])
-        results = ndr(client, args.ports, args.precision, args.threshold, args.duration)
+        results = ndr(
+            client=client,
+            ports=args.ports,
+            precision=args.precision,
+            threshold=args.threshold,
+            wait_time_s=args.wait,
+            duration_s=args.duration,
+            rx_delay_ms=args.delay,
+        )
     except trex.TRexError as err:
         print(f"Error in TRex: {err}", file=sys.stderr)
         exit(1)
