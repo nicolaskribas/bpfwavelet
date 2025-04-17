@@ -6,18 +6,24 @@ import time
 
 sys.path.append("/opt/trex/current/trex_client/interactive")
 import trex.stl.api as trex
+from trex.stl.api import Ether, IP, UDP  # pyright: ignore[reportAttributeAccessIssue]
 
 
 """
 Design
 ======
 
-It loads the --profile and add it to the even --ports.
-To measure, wait for --wait seconds, start transmitting for --duration.
-It waits --delay after the end of transmission.
-It checks if loss is either above or bellow the --threshold to adjust the
-binary search. When difference between lower and upper bound is less then
---precision then it stops and the result is recorded to --results file.
+If --profile is given, it's loaded; otherwise, a built-in one is used. The
+profile is added to the even-numbered --ports.
+
+To measure:
+- Wait for --wait seconds.
+- Start traffic for --duration seconds.
+- Wait --delay ms after transmission ends.
+
+Packet loss is checked against --threshold to adjust the binary search bounds.
+The process stops when the difference between lower and upper bounds is less
+than --precision. Final results are saved to --results in JSON format.
 """
 
 
@@ -149,6 +155,49 @@ def port_list(astring) -> list[str]:
     return ports
 
 
+def pad_packet(unpadded, size: int):
+    size = size - 4  # deduct Ethernet FCS
+    pad_size = max(0, size - len(unpadded))
+    pad = "\0" * pad_size
+    return unpadded / pad
+
+
+def get_builtin_profile(packet_size: int):
+    pkt = Ether() / IP(src="10.0.1.1", dst="10.0.0.0") / UDP(sport=2048, dport=2048)
+    pkt = pad_packet(pkt, packet_size)
+
+    return trex.STLProfile(
+        [
+            trex.STLStream(
+                packet=trex.STLPktBuilder(
+                    pkt,
+                    vm=trex.STLScVmRaw(
+                        [
+                            trex.STLVmFlowVar(
+                                "dst",
+                                min_value="10.0.0.0",  # pyright: ignore[reportArgumentType]
+                                max_value="10.0.0.255",  # pyright: ignore[reportArgumentType]
+                                size=4,
+                                step=1,
+                                op="inc",
+                            ),
+                            trex.STLVmWrFlowVar("dst", pkt_offset="IP.dst"),
+                            trex.STLVmFixIpv4(offset="IP"),
+                        ],
+                        cache_size=256,  # It will only produce the first 256 packets following the VM rules and cache it.
+                    ),
+                ),
+                mode=trex.STLTXCont(pps=1),
+            ),
+            trex.STLStream(
+                packet=trex.STLPktBuilder(pkt),
+                mode=trex.STLTXCont(pps=1000),
+                flow_stats=trex.STLFlowLatencyStats(pg_id=0),
+            ),
+        ]
+    )
+
+
 def get_args():
     parser = argparse.ArgumentParser(description="Find the Non Drop Rate using TRex")
     parser.add_argument(
@@ -172,12 +221,6 @@ def get_args():
         type=float,
         default=100,
         help="precision in bytes per second of the rate (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--profile",
-        type=str,
-        default="bench_profile.py",
-        help="path to python file with the traffic profile (default: %(default)s)",
     )
     parser.add_argument(
         "--wait",
@@ -207,6 +250,18 @@ def get_args():
         default="result.json",
         help="file where the results will be saved in json format (default: %(default)s)",
     )
+    profile_group = parser.add_mutually_exclusive_group()
+    profile_group.add_argument(
+        "--size",
+        type=int,
+        default=64,
+        help="packet size in bytes for the builtin traffic profile (default: %(default)s)",
+    )
+    profile_group.add_argument(
+        "--profile",
+        type=str,
+        help="path to python file with the traffic profile to be used instead of the builtin one",
+    )
     return parser.parse_args()
 
 
@@ -215,11 +270,14 @@ if __name__ == "__main__":
 
     client = trex.STLClient(verbose_level="none")
 
-    try:
-        profile = trex.STLProfile.load(args.profile)
-    except trex.TRexError as err:
-        print(f"Error loading profile: {err}", file=sys.stderr)
-        exit(1)
+    if args.profile is not None:
+        try:
+            profile = trex.STLProfile.load(args.profile)
+        except trex.TRexError as err:
+            print(f"Error loading profile: {err}", file=sys.stderr)
+            exit(1)
+    else:
+        profile = get_builtin_profile(args.size)
 
     try:
         client.connect()
