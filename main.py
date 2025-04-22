@@ -79,14 +79,15 @@ def measure(
     lost_percentage: float = lost / tx * 100
 
     return {
+        "ports": ports,
+        "expected_duration_ms": duration_s * 1000,
+        "rx_delay_ms": rx_delay_ms,
         "rate": rate,
+        "timeout_ms": timeout_s * 1000,
+        "stopped_early": stopped_early,
+        "actual_duration_ms": actual_duration_ns / 1000000,
         "lost": lost,
         "lost_percentage": lost_percentage,
-        "expected_duration_ms": duration_s * 1000,
-        "duration_timeout_ms": timeout_s * 1000,
-        "actual_duration_ms": actual_duration_ns / 1000000,
-        "rx_delay_ms": rx_delay_ms,
-        "stopped_early": stopped_early,
         **stats,
     }
 
@@ -113,6 +114,9 @@ def ndr(
     upper_bps: int = math.floor(warmup_tx_bits / warmup_duration_s)
 
     warmup_stats = {
+        "precision_bps": precision_bps,
+        "threshold": threshold,
+        "wait_time_s": wait_time_s,
         "iteration": iteration,
         "lower_bps": lower_bps,
         "upper_bps": upper_bps,
@@ -139,6 +143,9 @@ def ndr(
 
         # Log
         stats = {
+            "precision_bps": precision_bps,
+            "threshold": threshold,
+            "wait_time_s": wait_time_s,
             "iteration": iteration,
             "lower_bps": lower_bps,
             "upper_bps": upper_bps,
