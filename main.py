@@ -51,13 +51,18 @@ def measure(
         clear_xstats=True,
     )
 
-    client.start(ports[::2], mult=rate, duration=duration_s)
+    client.start(
+        ports[::2],
+        mult=rate,
+        duration=duration_s,
+        core_mask=trex.STLClient.CORE_MASK_PIN,
+    )
     start_time_ns = time.monotonic_ns()
 
-    duration_timeout_s = math.ceil(1.1 * duration_s)  # Timeout is 110% of the duration
+    timeout_s = math.ceil(1.1 * duration_s)  # Timeout is 110% of the duration
 
     try:
-        client.wait_on_traffic(timeout=duration_timeout_s, rx_delay_ms=rx_delay_ms)
+        client.wait_on_traffic(ports[::2], timeout=timeout_s, rx_delay_ms=rx_delay_ms)
         stopped_early = False
     except trex.TRexTimeoutError:
         client.stop(ports[::2], rx_delay_ms=rx_delay_ms)
@@ -78,7 +83,7 @@ def measure(
         "lost": lost,
         "lost_percentage": lost_percentage,
         "expected_duration_ms": duration_s * 1000,
-        "duration_timeout_ms": duration_timeout_s * 1000,
+        "duration_timeout_ms": timeout_s * 1000,
         "actual_duration_ms": actual_duration_ns / 1000000,
         "rx_delay_ms": rx_delay_ms,
         "stopped_early": stopped_early,
@@ -89,7 +94,7 @@ def measure(
 def ndr(
     client: trex.STLClient,
     ports: list[str],
-    precision: float,
+    precision_bps: float,
     threshold: float,
     wait_time_s: int,
     duration_s: int,
@@ -115,7 +120,7 @@ def ndr(
     }
     log.append(warmup_stats)
 
-    while (upper_bps - lower_bps) > precision:
+    while (upper_bps - lower_bps) > precision_bps:
         iteration += 1
 
         # Calculate middle point
@@ -166,36 +171,36 @@ def get_builtin_profile(packet_size: int):
     pkt = Ether() / IP(src="10.0.1.1", dst="10.0.0.0") / UDP(sport=2048, dport=2048)
     pkt = pad_packet(pkt, packet_size)
 
-    return trex.STLProfile(
+    multi_dst_vm = trex.STLScVmRaw(
         [
-            trex.STLStream(
-                packet=trex.STLPktBuilder(
-                    pkt,
-                    vm=trex.STLScVmRaw(
-                        [
-                            trex.STLVmFlowVar(
-                                "dst",
-                                min_value="10.0.0.0",  # pyright: ignore[reportArgumentType]
-                                max_value="10.0.0.255",  # pyright: ignore[reportArgumentType]
-                                size=4,
-                                step=1,
-                                op="inc",
-                            ),
-                            trex.STLVmWrFlowVar("dst", pkt_offset="IP.dst"),
-                            trex.STLVmFixIpv4(offset="IP"),
-                        ],
-                        cache_size=256,  # It will only produce the first 256 packets following the VM rules and cache it.
-                    ),
-                ),
-                mode=trex.STLTXCont(pps=1),
+            trex.STLVmFlowVar(
+                "dst",
+                min_value="10.0.0.0",  # pyright: ignore[reportArgumentType]
+                max_value="10.0.0.255",  # pyright: ignore[reportArgumentType]
+                size=4,
+                step=1,
+                op="inc",
             ),
-            trex.STLStream(
-                packet=trex.STLPktBuilder(pkt),
-                mode=trex.STLTXCont(pps=1000),
-                flow_stats=trex.STLFlowLatencyStats(pg_id=0),
-            ),
-        ]
+            trex.STLVmWrFlowVar("dst", pkt_offset="IP.dst"),
+            trex.STLVmFixIpv4(offset="IP"),
+        ],
+        cache_size=256,  # It will only produce the first 256 packets following the VM rules and cache them
     )
+
+    # Stream that will put pressure on the system. The rate is affected by multipliers
+    pressure_stream = trex.STLStream(
+        packet=trex.STLPktBuilder(pkt, vm=multi_dst_vm),
+        mode=trex.STLTXCont(pps=1),
+    )
+
+    # Stream with latency information and fixed rate of 1000pps, for gathering latency statistics
+    latency_stream = trex.STLStream(
+        packet=trex.STLPktBuilder(pkt),
+        mode=trex.STLTXCont(pps=1000),
+        flow_stats=trex.STLFlowLatencyStats(pg_id=0),
+    )
+
+    return trex.STLProfile([pressure_stream, latency_stream])
 
 
 def get_args():
@@ -219,8 +224,8 @@ def get_args():
     parser.add_argument(
         "--precision",
         type=float,
-        default=100,
-        help="precision in bytes per second of the rate (default: %(default)s)",
+        default=512,
+        help="precision in bits per second of the rate (default: %(default)s)",
     )
     parser.add_argument(
         "--wait",
@@ -291,7 +296,7 @@ if __name__ == "__main__":
         results = ndr(
             client=client,
             ports=args.ports,
-            precision=args.precision,
+            precision_bps=args.precision,
             threshold=args.threshold,
             wait_time_s=args.wait,
             duration_s=args.duration,
