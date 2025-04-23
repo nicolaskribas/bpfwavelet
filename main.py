@@ -27,10 +27,10 @@ than --precision. Final results are saved to --results in JSON format.
 """
 
 
-def get_full_stats(client: trex.STLClient, ports: set[str]) -> dict:
+def get_full_stats(client: trex.STLClient, ports: set[int]) -> dict:
     return {
         "stats": client.get_stats(list(ports)),
-        "xstats": {port: client.get_xstats(int(port)) for port in ports},
+        "xstats": {port: client.get_xstats(port) for port in ports},
         "pgid": client.get_pgid_stats(),
         "util": client.get_util_stats(),
     }
@@ -38,7 +38,7 @@ def get_full_stats(client: trex.STLClient, ports: set[str]) -> dict:
 
 def measure(
     client: trex.STLClient,
-    ports: list[str],
+    ports: list[int],
     duration_s: int,
     rx_delay_ms: int,
     rate: str,
@@ -94,7 +94,7 @@ def measure(
 
 def ndr(
     client: trex.STLClient,
-    ports: list[str],
+    ports: list[int],
     precision_bps: float,
     threshold: float,
     wait_time_s: int,
@@ -156,8 +156,8 @@ def ndr(
     return log
 
 
-def port_list(astring) -> list[str]:
-    ports = [port.strip() for port in astring.split(",")]
+def port_list(astring: str) -> list[int]:
+    ports = [int(port.strip()) for port in astring.split(",")]
 
     if len(ports) % 2 != 0:
         raise argparse.ArgumentTypeError(
