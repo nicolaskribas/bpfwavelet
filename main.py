@@ -149,6 +149,7 @@ def ndr(
             "iteration": iteration,
             "lower_bps": lower_bps,
             "upper_bps": upper_bps,
+            "rate_bps": rate_bps,
             **result,
         }
         log.append(stats)

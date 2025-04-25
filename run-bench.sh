@@ -2,22 +2,25 @@
 set -Eeuo pipefail
 trap 'echo "$0: Error on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
-if [ "${EUID:-$(id -u)}" -ne 0 ]; then
-	echo "Need root priviliges" >&2
+if [ -z "${1-}" ]; then
+	echo 'No tag supplied' >&2
 	exit 1
 fi
+TAG="$1" # give it a memorable name
 
 BENCHDIR="$(dirname -- "$(realpath -- "$0")")"
+TIMESTAMP="$(date -Iseconds)"
 
-"${BENCHDIR}/disable-dynamic-cpu-features.sh"
-"${BENCHDIR}/enable-hugepages.sh"
+RUN_DIR="${BENCHDIR}/results/${TAG}/${TIMESTAMP}"
+mkdir -p "${RUN_DIR}"
 
-pushd /opt/trex/current >/dev/null || {
-	echo "Error changing directory to /opt/trex/current. Is TRex installed?" >&2
-	exit 1
-}
-./t-rex-64 -i &
-TREX_PID=$!
-popd
+echo "Results will be saved to '${RUN_DIR}' directory"
 
-kill -INT $TREX_PID
+for SIZE in '64' '128' '256' '512' '1024' '1280' '1518'; do
+	uv run main.py \
+		--ports 0,0 \
+		--size "${SIZE}" \
+		--delay 1000 \
+		--duration 60 \
+		--results "${RUN_DIR}/${SIZE}.json"
+done
