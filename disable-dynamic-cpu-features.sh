@@ -16,6 +16,7 @@ echo off >/sys/devices/system/cpu/smt/control
 
 # disable boost
 echo 0 >/sys/devices/system/cpu/cpufreq/boost
+# maybe this if you have an intel cpu: echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo
 
 # disable C-states
 echo 1 | tee /sys/devices/system/cpu/cpu*/cpuidle/state*/disable >/dev/null

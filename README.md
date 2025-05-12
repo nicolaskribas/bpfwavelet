@@ -3,47 +3,92 @@
 Collection of scripts to benchmark XDP programs using
 [TRex traffic generator](https://trex-tgn.cisco.com/)
 
-## How to use
+## Dependencies
 
-Install TRex to `/opt/trex`.
+- **Python**: You need to install
+  [uv package manager](https://docs.astral.sh/uv/) to manage Python dependencies
+  and Python itself.
 
-```sh
-./install-trex.sh --insecure
-```
+- **TRex**: We provide a [script](install-trex.sh) to install TRex.
 
-Enable hugepages
-```sh
-./enable-hugepages.sh
-```
+## Setting up the traffic generator
 
-Now, disable simultaneous multithreading (SMT), boost and C-states, and set
-scaling governor to performance.
+1. Install TRex to `/opt/trex`
+
+   ```sh
+   ./install-trex.sh --insecure
+   ```
+
+   `--insecure` tells curl **not** to verify server's TLS certificate. Needed
+   because TRex servers has problems with certificates.
+
+   See `./install-trex.sh --help` for more usage options.
+
+2. Enable hugepages
+
+   ```sh
+   ./enable-hugepages.sh
+   ```
+
+3. Disable dynamic CPU features
+
+   Now, disable simultaneous multithreading (SMT), boost and C-states, and set
+   scaling governor to performance.
+
+   ```sh
+   ./disable-dynamic-cpu-features.sh
+   ```
+
+4. Configure TRex
+
+   To configure TRex you can use `dpdk_setup_ports.py` interactively to select
+   which ports to use. It also automatically assign which cores to use, so make
+   sure to run it after disabling SMT.
+
+   ```sh
+   cd /opt/trex/current
+   ./dpdk_setup_ports.py -i --force-macs
+   ```
+
+   You can find more information on configuring TRex in its
+   [official documentation](https://trex-tgn.cisco.com/trex/doc/trex_manual.html)
+   under section “3. First time running.”
+
+## Setting up the DUT
+
+Well, this is particular to your use case. But a good practice is to disable
+dynamic CPU feature:
 
 ```sh
 ./disable-dynamic-cpu-features.sh
 ```
 
-To configure TRex you can use `dpdk_setup_ports.py` interactively to select
-which ports to use. It also automatically assign which cores to use, so make
-sure to run it after `disable-dynamic-cpu-features.sh` as it disables SMT.
+## Running
 
-```sh
-pushd /opt/trex/current
-./dpdk_setup_ports.py -i --force-macs
-popd
-```
+1. Start TRex
 
-```sh
-./run-bench
-```
+   ```sh
+   cd /opt/trex/current
+   ./t-rex-64 -i -c <numberofcores>
+   ```
 
-You can run the benchmark script in the same machine where TRex is running or
-you can forward the ports to it and run the scrip locally:
+2. Run the benchmark
 
-```sh
-ssh -L 4501:localhost:4501 -L 4500:localhost:4500 <trexserver>
-```
+   ```sh
+   uv run main.py
+   ```
 
-```sh
-./t-rex-64 -i -c 14
-```
+   See `uv run main.py --help` for documentation and available options.
+
+> [!TIP]
+> You can run the benchmark script locally and make it control a TRex server
+> started remotely.
+>
+> For this you have to, first, forward the ports used for controlling the TRex
+> server, that is ports 4500 and 4501:
+>
+> ```sh
+> ssh -L 4500:localhost:4500 -L 4501:localhost:4501 user@trexserver
+> ```
+>
+> Then you can run the benchmark script normally.
