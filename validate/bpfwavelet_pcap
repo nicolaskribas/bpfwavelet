@@ -16,7 +16,7 @@ finish() {
 }
 trap finish INT TERM EXIT
 
-bpfwavelet_bin="$(dirname -- "$(realpath -- "$0")")"/bpfwavelet
+bpfwavelet_bin="$(dirname -- "$(realpath -- "$0")")"../src/bpfwavelet
 if [ ! -x "$bpfwavelet_bin" ]; then
 	echo "$bpfwavelet_bin not found" >&2
 	exit 1

@@ -1,7 +1,7 @@
 #!/bin/sh
 
-script_location="$(dirname "$(realpath "$0")")"
-bpfwavelet_pcap_bin="${script_location}/../bpfwavelet_pcap"
+script_location="$(dirname -- "$(realpath -- "$0")")"
+bpfwavelet_pcap_bin="${script_location}/bpfwavelet_pcap"
 mkdir -p "${script_location}/results"
 
 test() {
@@ -14,7 +14,7 @@ test() {
 	tcpdump -r "$capture" -w - "$filter" | "$bpfwavelet_pcap_bin" -v $parameters >"$logfile" &
 }
 
-test captures/cobalt-strike.pcap  '' '-t 250000000'
+test captures/cobalt-strike.pcap '' '-t 250000000'
 
 test captures/trickbot-a.pcap '' '-t 250000000'
 
