@@ -1,2 +1,0 @@
-numpy==2.0.0
-PyWavelets==1.6.0
