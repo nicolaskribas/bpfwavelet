@@ -1,33 +1,35 @@
-# bpfwavelet: periodicity detection using discrete wavelet transform in eBPF
+# bpfwavelet: Periodicity detection using discrete wavelet transform in eBPF
 
-# Building
+## Building
 
-## Dependencies
+### Dependencies
 
-`make`, `clang`, `libelf` and `zlib` packages are needed to build. Make sure they are installed.
+`make`, `clang`, `libelf` and `zlib` packages are needed to build. Make sure
+they are installed.
 
-Also, this project depends on `libbpf` and `bpftool`. We do vendoring of both as git submodules in this repository.
-So clone the repository like this:
+Also, this project depends on `libbpf` and `bpftool`. We do vendoring of both as
+git submodules in this repository. Clone the repository like this:
 
 ```shell
 git clone --recurse-submodules https://github.com/nicolaskribas/bpfwavelet.git
 ```
 
-If you already cloned the repository you can initialize the submodules like this:
+If you already cloned the repository you can initialize the submodules like
+this:
 
 ```shell
 git submodule update --init --recursive
 ```
 
-## Compiling
+### Compiling
 
 ```shell
 make bpfwavelet
 ```
 
-# Usage
+## Usage
 
-```
+```text
 bpfwavelet [options] <ifname>
 options:
   -h  print help
