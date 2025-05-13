@@ -1,4 +1,4 @@
-SRC := src
+SRC := .
 OUTPUT := .output
 CLANG ?= clang
 LIBBPF_SRC := $(abspath libbpf/src)
@@ -97,7 +97,7 @@ $(OUTPUT)/%.bpf.o: $(SRC)/%.bpf.c $(LIBBPF_OBJ) $$(wildcard $(SRC)/%.h) $(VMLINU
 	$(call msg,BPF,$@)
 	$(Q)$(CLANG) $(CFLAGS) -O2 -target bpf -D__TARGET_ARCH_$(ARCH)		      \
 		     $(INCLUDES) $(CLANG_BPF_SYS_INCLUDES)		      \
-		     -c $(filter $(SRC)/%.c,$^) -o $(patsubst %.bpf.o,%.tmp.bpf.o,$@)
+		     -c $(filter %.c,$^) -o $(patsubst %.bpf.o,%.tmp.bpf.o,$@)
 	$(Q)$(BPFTOOL) gen object $@ $(patsubst %.bpf.o,%.tmp.bpf.o,$@)
 
 # Generate BPF skeletons
@@ -110,7 +110,7 @@ $(patsubst %,$(OUTPUT)/%.o,$(APPS)): %.o: %.skel.h
 
 $(OUTPUT)/%.o: $(SRC)/%.c $$(wildcard $(SRC)/%.h) $(DEBUG_MODE_FILE) | $(OUTPUT)
 	$(call msg,CC,$@)
-	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(filter $(SRC)/%.c,$^) -o $@
+	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(filter %.c,$^) -o $@
 
 # Build application binary
 $(APPS): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) | $(OUTPUT)
