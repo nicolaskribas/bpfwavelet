@@ -1,5 +1,5 @@
 -Wall
 -I.output
 -Ilibbpf/include/uapi
--Ivmlinux
+-Ivmlinux.h/include/x86
 -DDEBUG

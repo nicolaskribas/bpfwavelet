@@ -1,4 +1,3 @@
-SRC := .
 OUTPUT := .output
 CLANG ?= clang
 LIBBPF_SRC := $(abspath libbpf/src)
@@ -14,7 +13,7 @@ ARCH ?= $(shell uname -m | sed 's/x86_64/x86/' \
 			 | sed 's/mips.*/mips/' \
 			 | sed 's/riscv64/riscv/' \
 			 | sed 's/loongarch64/loongarch/')
-VMLINUX := vmlinux/$(ARCH)/vmlinux.h
+VMLINUX := vmlinux.h/include/$(ARCH)/vmlinux.h
 # Use our own libbpf API headers and Linux UAPI headers distributed with
 # libbpf to avoid dependency on system-wide headers, which could be missing or
 # outdated
@@ -92,8 +91,7 @@ $(DEBUG_MODE_FILE): force | $(OUTPUT)
 	}
 
 # Build BPF code
-.SECONDEXPANSION:
-$(OUTPUT)/%.bpf.o: $(SRC)/%.bpf.c $(LIBBPF_OBJ) $$(wildcard $(SRC)/%.h) $(VMLINUX) $(DEBUG_MODE_FILE) | $(OUTPUT) $(BPFTOOL)
+$(OUTPUT)/%.bpf.o: %.bpf.c $(LIBBPF_OBJ) $(wildcard %.h) $(VMLINUX) $(DEBUG_MODE_FILE) | $(OUTPUT) $(BPFTOOL)
 	$(call msg,BPF,$@)
 	$(Q)$(CLANG) $(CFLAGS) -O2 -target bpf -D__TARGET_ARCH_$(ARCH)		      \
 		     $(INCLUDES) $(CLANG_BPF_SYS_INCLUDES)		      \
@@ -108,7 +106,7 @@ $(OUTPUT)/%.skel.h: $(OUTPUT)/%.bpf.o | $(OUTPUT) $(BPFTOOL)
 # Build user-space code
 $(patsubst %,$(OUTPUT)/%.o,$(APPS)): %.o: %.skel.h
 
-$(OUTPUT)/%.o: $(SRC)/%.c $$(wildcard $(SRC)/%.h) $(DEBUG_MODE_FILE) | $(OUTPUT)
+$(OUTPUT)/%.o: %.c $(wildcard %.h) $(DEBUG_MODE_FILE) | $(OUTPUT)
 	$(call msg,CC,$@)
 	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(filter %.c,$^) -o $@
 
