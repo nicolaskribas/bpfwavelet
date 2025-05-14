@@ -1,4 +1,5 @@
 OUTPUT := .output
+PREFIX ?= /usr/local
 CLANG ?= clang
 LIBBPF_SRC := $(abspath libbpf/src)
 BPFTOOL_SRC := $(abspath bpftool/src)
@@ -60,6 +61,21 @@ $(call allow-override,LD,$(CROSS_COMPILE)ld)
 
 .PHONY: all
 all: $(APPS)
+
+.PHONY: install
+install: $(APPS)
+	$(call msg,INSTALL)
+	$(Q)mkdir -p $(DESTDIR)$(PREFIX)/bin
+	$(Q)for app in $(APPS); do \
+		cp $$app $(DESTDIR)$(PREFIX)/bin/; \
+	done
+
+.PHONY: uninstall
+uninstall:
+	$(call msg,UNINSTALL)
+	$(Q)for app in $(APPS); do \
+		rm -f $(DESTDIR)$(PREFIX)/bin/$$app; \
+	done
 
 .PHONY: clean
 clean:
