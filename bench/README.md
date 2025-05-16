@@ -54,7 +54,7 @@ Collection of scripts to benchmark XDP programs using
    [official documentation](https://trex-tgn.cisco.com/trex/doc/trex_manual.html)
    under section “3. First time running.”
 
-## Setting up the DUT
+## Setting up the device under test
 
 Well, this is particular to your use case. But a good practice is to disable
 dynamic CPU feature:
@@ -69,7 +69,7 @@ dynamic CPU feature:
 
    ```sh
    cd /opt/trex/current
-   ./t-rex-64 -i -c <numberofcores>
+   ./t-rex-64 -i -c numberofcores
    ```
 
 2. Run the benchmark

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import json
 import math
@@ -13,13 +15,17 @@ from trex.stl.api import Ether, IP, UDP  # pyright: ignore[reportAttributeAccess
 Design
 ======
 
-If --profile is given, it's loaded; otherwise, a built-in one is used. The
-profile is added to the even-numbered --ports.
+If --profile is given, it's loaded; otherwise, the built-in profiles with
+packets of size --size is used. The profile is added to the even-numbered
+--ports.
 
 To measure:
-- Wait for --wait seconds.
+
 - Start traffic for --duration seconds.
-- Wait --delay ms after transmission ends.
+- Wait --delay milliseconds after transmission ends.
+- Then get the statistics.
+
+We wait for --wait seconds between each measurement.
 
 Packet loss is checked against --threshold to adjust the binary search bounds.
 The process stops when the difference between lower and upper bounds is less
@@ -149,7 +155,6 @@ def ndr(
             "iteration": iteration,
             "lower_bps": lower_bps,
             "upper_bps": upper_bps,
-            "rate_bps": rate_bps,
             **result,
         }
         log.append(stats)
@@ -192,7 +197,7 @@ def get_builtin_profile(packet_size: int):
             trex.STLVmWrFlowVar("dst", pkt_offset="IP.dst"),
             trex.STLVmFixIpv4(offset="IP"),
         ],
-        cache_size=256,  # It will only produce the first 256 packets following the VM rules and cache them
+        cache_size=256,  # It will only produce the first 256 packets (10.0.0.0-10.0.0.255) following the VM rules and cache them
     )
 
     # Stream that will put pressure on the system. The rate is affected by multipliers
