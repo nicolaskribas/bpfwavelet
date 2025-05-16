@@ -12,3 +12,6 @@ wheels/
 # bpfwavelet compilation artifacts
 bpfwavelet
 .output/
+
+# Jupyter notebook
+.ipynb_checkpoints

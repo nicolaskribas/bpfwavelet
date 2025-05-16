@@ -1,4 +1,4 @@
-# Benchmark Analisys
+# Benchmark analysis
 
 Run
 
