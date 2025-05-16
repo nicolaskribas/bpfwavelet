@@ -1,0 +1,10 @@
+[project]
+name = "bench"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = "~=3.11.0"
+dependencies = []
+
+[tool.pyright]
+extraPaths = [ "/opt/trex/current/trex_client/interactive" ]
