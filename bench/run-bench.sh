@@ -1,65 +1,188 @@
 #!/bin/bash
 set -Eeuo pipefail
-trap 'echo "$0: Error on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
+trap 'echo "${0}: Error on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
-# Parameters
-DELAY=1000
-DURATION=60
-PKT_SIZES=('64' '128' '256' '512' '1024' '1280' '1518')
-SAMPLING_INTERVALS=('250000' '1000000000') # 250µs and 1s in nanoseconds
-DECOMPOSITION_LEVELS=('0' '1' '2' '4' '8' '16' '32')
+# Args
+server=
+interface=
+ports='0,0'
+delay='1000'  # in milliseconds
+duration='60' # in seconds
 
-SERVER=p4server3
-PORT=enp132s0f0np0
+usage() {
+	printf -- "%s\n" "${0}"
+	printf -- "\n"
+	printf -- "\tThe following options are available:\n"
+	printf -- "\n"
+	printf -- "--help\n"
+	printf -- "  Prints this message.\n"
+	printf -- "\n"
+	printf -- "--server=str\n"
+	printf -- "  String in the form of 'user@hostname' that indicates the server to run bpfwavelet.\n"
+	printf -- "\n"
+	printf -- "--interface=str\n"
+	printf -- "  Interface to attach bpfwavelet in the server.\n"
+	printf -- "\n"
+	printf -- "--ports=str\n"
+	printf -- "  Ports TRex will use to send/receive traffic. Passed to NDR, see ./ndr --help.\n"
+	printf -- "  Default is '%s'\n" "${ports}"
+	printf -- "\n"
+	printf -- "--delay=str\n"
+	printf -- "  Delay in milliseconds. Passed to NDR, see ./ndr --help\n"
+	printf -- "  Default is '%s'\n" "${delay}"
+	printf -- "\n"
+	printf -- "--duration=str\n"
+	printf -- "  Duration in seconds. Passed to NDR, see ./ndr --help\n"
+	printf -- "  Default is %s\n" "${duration}"
+}
+if ! opts="$(getopt -o 'h' --longoptions 'help,server:,interface:,ports:,delay:,duration:' -n "${0}" -- "${@}")"; then
+	usage >&2
+	exit 1
+fi
 
-BENCHDIR="$(dirname -- "$(realpath -- "$0")")"
-TIMESTAMP="$(date -Iseconds)"
+eval set -- "$opts"
+unset opts
 
-PID_FILE='/tmp/pid'
+while true; do
+	case "${1}" in
+	-h | --help)
+		shift 1
+		usage
+		exit 0
+		;;
+	--server)
+		server="${2}"
+		shift 2
+		continue
+		;;
+	--interface)
+		interface="${2}"
+		shift 2
+		continue
+		;;
+	--ports)
+		ports="${2}"
+		shift 2
+		continue
+		;;
+	--delay)
+		delay="${2}"
+		shift 2
+		continue
+		;;
+	--duration)
+		duration="${2}"
+		shift 2
+		continue
+		;;
+	--)
+		shift
+		break
+		;;
+	*)
+		echo "ERROR: Internal error" >&2
+		exit 1
+		;;
+	esac
+done
+
+if [ -z "${server}" ]; then
+	echo "ERROR: No server provided" >&2
+	usage >&2
+	exit 1
+fi
+
+if [ -z "${interface}" ]; then
+	echo "ERROR: No interface provided" >&2
+	usage >&2
+	exit 1
+fi
+
+if [ "$#" -gt 0 ]; then
+	echo "ERROR: Unexpected arguments: ${*}" >&2
+	usage >&2
+	exit 1
+fi
+
+readonly pkt_sizes=('64' '128' '256' '512' '1024' '1280' '1518')
+readonly sampling_intervals=('250000' '1000000000') # 250µs and 1s in nanoseconds
+readonly decomposition_levels=('0' '1' '2' '4' '8' '16' '32')
+
+readonly pid_file='/tmp/bpfwavelet-bench.pid'
+
+benchdir="$(dirname -- "$(realpath -- "$0")")"
+timestamp="$(date -Iseconds)"
+readonly benchdir
+readonly timestamp
+
+# Args:
+# - Command string
+# - Path of log dir
 remote_spawn() {
-	DESTINATION="$1"
-	CMD="$2"
-	LOG="$3"
+	local -r cmd="${1}"
+	local -r log_dir="${2}"
 
-	SAVE_PID='echo $! >'"${PID_FILE}"
-	NOHUP_CMD_SAVE_PID="nohup ${CMD} 1>${LOG}.stdout 2>${LOG}.stderr & ${SAVE_PID}"
+	local -r save_pid="echo \$! >${pid_file}"
+	local -r nohup_cmd_save_pid="mkdir -p '${log_dir}'; nohup ${cmd} 1>${log_dir}/stdout 2>${log_dir}/stderr & ${save_pid}"
 
-	ssh "${DESTINATION}" -- "${NOHUP_CMD_SAVE_PID}"
+	ssh "${server}" -- "${nohup_cmd_save_pid}"
+	echo "On ${server} running: ${cmd}"
+	echo "Logs being saved to: ${log_dir}/{stdout,stderr}"
 }
 
 remote_kill() {
-	DESTINATION="$1"
-
-	ssh "${DESTINATION}" -- sudo kill -SIGTERM '"$(cat '"${PID_FILE}"')"'
+	ssh "${server}" -- sudo kill -SIGTERM '"$(cat '${pid_file}')"'
 }
 
-run-binary-search() {
-	REMOTE_PID="$(remote_spawn "${SERVER}" "${CMD}")"
+# Args:
+# - Packet size
+# - Commmand string
+# - Tag that identifies what is being benchmarked
+run-ndr() {
+	local -r pkt_size="${1}"
+	local -r cmd="${2}"
+	local -r tag="${3}"
 
-	RUN_DIR="${BENCHDIR}/results/${TAG}/${TIMESTAMP}"
-	mkdir -p "${RUN_DIR}"
-	uv run main.py \
-		--ports 0,0 \
-		--size "${PKT_SIZE}" \
-		--delay "${DELAY}" \
-		--duration "${DURATION}" \
-		--results "${RUN_DIR}/${PKT_SIZE}.json"
+	local -r run_dir="${benchdir}/results/${tag}/${timestamp}"
+	mkdir -p "${run_dir}"
 
-	remote_kill "${SERVER}" "${REMOTE_PID}"
+	remote_spawn "${cmd}" "bpfwaveletbench/${tag}/${timestamp}"
+	sleep 5 # give it some time to make sure the XDP program is attached
+
+	echo "Running NDR with packets of ${pkt_size} bytes"
+	"${benchdir}/ndr.py" \
+		--ports "${ports}" \
+		--size "${pkt_size}" \
+		--delay "${delay}" \
+		--duration "${delay}" \
+		--results "${run_dir}/${pkt_size}.json"
+	echo "Results written to: ${run_dir}/${pkt_size}.json"
+
+	remote_kill "${server}"
 }
 
-for PKT_SIZE in "${PKT_SIZES[@]}"; do
+cleanup() {
+	rc="${?}"
+	trap '' EXIT INT QUIT TERM HUP
+
+	remote_kill
+
+	exit "${rc}"
+}
+trap cleanup EXIT INT QUIT TERM HUP
+
+for pkt_size in "${pkt_sizes[@]}"; do
 	# Run with xdp-bench: our baseline
-	CMD="sudo xdp-bench tx ${PORT}"
-	TAG='xdp-bench-tx'
-	run-binary-search
+	cmd="sudo xdp-bench tx ${interface}"
+	tag='xdp-bench-tx'
+	run-ndr "${pkt_size}" "${cmd}" "${tag}"
 
 	# Run with bpfwavelet varying parameters
-	for SAMPLING_INTERVAL in "${SAMPLING_INTERVALS[@]}"; do
-		for DECOMPOSITION_LEVEL in "${DECOMPOSITION_LEVELS[@]}"; do
-			CMD="sudo bpfwavelet -d -t ${SAMPLING_INTERVAL} -l ${DECOMPOSITION_LEVEL} -r ${PORT} -v"
-			TAG="bpfwavelet-${SAMPLING_INTERVAL}-${DECOMPOSITION_LEVEL}"
-			run-binary-search "${CMD}" "${TAG}"
+	for sampling_interval in "${sampling_intervals[@]}"; do
+		for decomposition_level in "${decomposition_levels[@]}"; do
+			cmd="sudo bpfwavelet -d -t ${sampling_interval} -l ${decomposition_level} -r ${interface} -v"
+			tag="bpfwavelet-${sampling_interval}-${decomposition_level}"
+			run-ndr "${pkt_size}" "${cmd}" "${tag}"
 		done
 	done
 done

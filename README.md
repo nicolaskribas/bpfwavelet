@@ -14,9 +14,9 @@ benchmark.
 Following we have [bench-analysis/](bench-analysis/) with python notebooks used
 to analise and visualize the results of the benchmark.
 
-In [validade/](validade/) is located packet captures to demonstrate use cases of
+In [validate/](validate/) is located packet captures to demonstrate use cases of
 bpfwavelet as well as the script used to
 
-In [check/](check/) there is scripts used for checking the correctness of our
+In [check/](check/) there are scripts used for checking the correctness of our
 implementation. We compared results of our algorithm implemented in eBPF with
 one implementation in python that uses a known wavelet library.
