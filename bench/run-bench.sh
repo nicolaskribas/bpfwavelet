@@ -154,7 +154,7 @@ run-ndr() {
 		--ports "${ports}" \
 		--size "${pkt_size}" \
 		--delay "${delay}" \
-		--duration "${delay}" \
+		--duration "${duration}" \
 		--results "${run_dir}/${pkt_size}.json"
 	echo "Results written to: ${run_dir}/${pkt_size}.json"
 
