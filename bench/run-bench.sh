@@ -118,16 +118,18 @@ readonly timestamp
 # Args:
 # - Command string
 # - Path of log dir
+# - Packet size (for logging)
 remote_spawn() {
 	local -r cmd="${1}"
 	local -r log_dir="${2}"
+	local -r pkt_size="${3}"
 
 	local -r save_pid="echo \$! >${pid_file}"
-	local -r nohup_cmd_save_pid="mkdir -p '${log_dir}'; nohup ${cmd} 1>${log_dir}/stdout 2>${log_dir}/stderr & ${save_pid}"
+	local -r nohup_cmd_save_pid="mkdir -p '${log_dir}'; nohup ${cmd} 1>${log_dir}/${pkt_size}.stdout 2>${log_dir}/${pkt_size}.stderr & ${save_pid}"
 
 	ssh "${server}" -- "${nohup_cmd_save_pid}"
 	echo "On ${server} running: ${cmd}"
-	echo "Logs being saved to: ${log_dir}/{stdout,stderr}"
+	echo "Logs being saved to: ${log_dir}/${pkt_size}.{stdout,stderr}"
 }
 
 remote_kill() {
@@ -146,7 +148,7 @@ run-ndr() {
 	local -r run_dir="${benchdir}/results/${tag}/${timestamp}"
 	mkdir -p "${run_dir}"
 
-	remote_spawn "${cmd}" "bpfwaveletbench/${tag}/${timestamp}"
+	remote_spawn "${cmd}" "bpfwaveletbench/${tag}/${timestamp}" "${pkt_size}"
 	sleep 5 # give it some time to make sure the XDP program is attached
 
 	echo "Running NDR with packets of ${pkt_size} bytes"
