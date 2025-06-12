@@ -15,6 +15,13 @@ from trex.stl.api import Ether, IP, UDP  # pyright: ignore[reportAttributeAccess
 Design
 ======
 
+In summary, it searches for the Partial Drop Rate (PDR), which is the maximum
+throughput the system can handle while maintaining packet loss below a specific
+rate. It repeats the measure with the found PDR.
+
+Implementation details
+----------------------
+
 If --profile is given, it's loaded; otherwise, the built-in profiles with
 packets of size --size is used. The profile is added to the even-numbered
 --ports.
@@ -29,7 +36,8 @@ We wait for --wait seconds between each measurement.
 
 Packet loss is checked against --threshold to adjust the binary search bounds.
 The process stops when the difference between lower and upper bounds is less
-than --precision. Final results are saved to --results in JSON format.
+than --precision. It repeats the measurement --repetitions times with the found
+PDR. Final results are saved to --results in JSON format.
 """
 
 
@@ -98,7 +106,7 @@ def measure(
     }
 
 
-def ndr(
+def pdr(
     client: trex.STLClient,
     ports: list[int],
     precision_bps: float,
@@ -106,9 +114,11 @@ def ndr(
     wait_time_s: int,
     duration_s: int,
     rx_delay_ms: int,
+    repetitions: int,
 ) -> list[dict]:
     log = []
     iteration: int = 0
+    rate_bps = 0
 
     # get the maximum transmission speed of TRex to use as upper bound, this also warms up the system
     warmup_result = measure(client, ports, duration_s, rx_delay_ms, rate="100%")
@@ -120,12 +130,15 @@ def ndr(
     upper_bps: int = math.floor(warmup_tx_bits / warmup_duration_s)
 
     warmup_stats = {
+        "stage": "warmup",
         "precision_bps": precision_bps,
         "threshold": threshold,
         "wait_time_s": wait_time_s,
-        "iteration": iteration,
+        "iteration": 0,
         "lower_bps": lower_bps,
         "upper_bps": upper_bps,
+        "repetition": None,
+        "repetitions": repetitions,
         **warmup_result,
     }
     log.append(warmup_stats)
@@ -149,12 +162,39 @@ def ndr(
 
         # Log
         stats = {
+            "stage": "search",
             "precision_bps": precision_bps,
             "threshold": threshold,
             "wait_time_s": wait_time_s,
             "iteration": iteration,
             "lower_bps": lower_bps,
             "upper_bps": upper_bps,
+            "repetition": None,
+            "repetitions": repetitions,
+            **result,
+        }
+        log.append(stats)
+
+    # Repeatedly measure with found pdr
+    pdr_bps = lower_bps
+    pdr_str = str(pdr_bps) + "bps"
+
+    for repetition in range(1, repetitions + 1):
+        iteration += 1
+        time.sleep(wait_time_s)
+        result = measure(client, ports, duration_s, rx_delay_ms, rate=pdr_str)
+
+        # Log
+        stats = {
+            "stage": "repeat",
+            "precision_bps": precision_bps,
+            "threshold": threshold,
+            "wait_time_s": wait_time_s,
+            "iteration": iteration,
+            "lower_bps": pdr_bps,
+            "upper_bps": pdr_bps,
+            "repetition": repetition,
+            "repetitions": repetitions,
             **result,
         }
         log.append(stats)
@@ -217,7 +257,9 @@ def get_builtin_profile(packet_size: int):
 
 
 def get_args():
-    parser = argparse.ArgumentParser(description="Find the Non Drop Rate using TRex")
+    parser = argparse.ArgumentParser(
+        description="Search the Partial Drop Rate using TRex"
+    )
     parser.add_argument(
         "--ports",
         type=port_list,
@@ -268,6 +310,12 @@ def get_args():
         default="result.json",
         help="file where the results will be saved in json format (default: %(default)s)",
     )
+    parser.add_argument(
+        "--repetitions",
+        type=int,
+        default=30,
+        help="number of mesurements taken repeatedly with the found pdr (default: %(default)s)",
+    )
     profile_group = parser.add_mutually_exclusive_group()
     profile_group.add_argument(
         "--size",
@@ -306,7 +354,7 @@ if __name__ == "__main__":
     try:
         client.reset()
         client.add_streams(streams=profile, ports=args.ports[::2])
-        results = ndr(
+        results = pdr(
             client=client,
             ports=args.ports,
             precision_bps=args.precision,
@@ -314,6 +362,7 @@ if __name__ == "__main__":
             wait_time_s=args.wait,
             duration_s=args.duration,
             rx_delay_ms=args.delay,
+            repetitions=args.repetitions,
         )
     except trex.TRexError as err:
         print(f"Error in TRex: {err}", file=sys.stderr)
