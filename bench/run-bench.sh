@@ -8,6 +8,7 @@ interface=
 ports='0,0'
 delay='1000'  # in milliseconds
 duration='60' # in seconds
+repetitions='30'
 
 usage() {
 	printf -- "%s\n" "${0}"
@@ -24,18 +25,22 @@ usage() {
 	printf -- "  Interface to attach bpfwavelet in the server.\n"
 	printf -- "\n"
 	printf -- "--ports=str\n"
-	printf -- "  Ports TRex will use to send/receive traffic. Passed to NDR, see ./ndr --help.\n"
+	printf -- "  Ports TRex will use to send/receive traffic. Passed to PDR, see ./pdr.py --help.\n"
 	printf -- "  Default is '%s'\n" "${ports}"
 	printf -- "\n"
 	printf -- "--delay=str\n"
-	printf -- "  Delay in milliseconds. Passed to NDR, see ./ndr --help\n"
+	printf -- "  Delay in milliseconds. Passed to PDR, see ./pdr.py --help\n"
 	printf -- "  Default is '%s'\n" "${delay}"
 	printf -- "\n"
 	printf -- "--duration=str\n"
-	printf -- "  Duration in seconds. Passed to NDR, see ./ndr --help\n"
+	printf -- "  Duration in seconds. Passed to PDR, see ./pdr.py --help\n"
 	printf -- "  Default is %s\n" "${duration}"
+	printf -- "\n"
+	printf -- "--repetitions=str\n"
+	printf -- "  Number of repetitions. Passed to PDR, see ./pdr.py --help\n"
+	printf -- "  Default is %s\n" "${repetitions}"
 }
-if ! opts="$(getopt -o 'h' --longoptions 'help,server:,interface:,ports:,delay:,duration:' -n "${0}" -- "${@}")"; then
+if ! opts="$(getopt -o 'h' --longoptions 'help,server:,interface:,ports:,delay:,duration:,repetitions:' -n "${0}" -- "${@}")"; then
 	usage >&2
 	exit 1
 fi
@@ -72,6 +77,11 @@ while true; do
 		;;
 	--duration)
 		duration="${2}"
+		shift 2
+		continue
+		;;
+	--repetitions)
+		repetitions="${2}"
 		shift 2
 		continue
 		;;
@@ -140,7 +150,7 @@ remote_kill() {
 # - Packet size
 # - Commmand string
 # - Tag that identifies what is being benchmarked
-run-ndr() {
+run-pdr() {
 	local -r pkt_size="${1}"
 	local -r cmd="${2}"
 	local -r tag="${3}"
@@ -151,12 +161,13 @@ run-ndr() {
 	remote_spawn "${cmd}" "bpfwaveletbench/${tag}/${timestamp}" "${pkt_size}"
 	sleep 5 # give it some time to make sure the XDP program is attached
 
-	echo "Running NDR with packets of ${pkt_size} bytes"
-	"${benchdir}/ndr.py" \
+	echo "Running PDR with packets of ${pkt_size} bytes"
+	"${benchdir}/pdr.py" \
 		--ports "${ports}" \
 		--size "${pkt_size}" \
 		--delay "${delay}" \
 		--duration "${duration}" \
+		--repetitions "${repetitions}" \
 		--results "${run_dir}/${pkt_size}.json"
 	echo "Results written to: ${run_dir}/${pkt_size}.json"
 
@@ -177,14 +188,14 @@ for pkt_size in "${pkt_sizes[@]}"; do
 	# Run with xdp-bench: our baseline
 	cmd="sudo xdp-bench tx ${interface}"
 	tag='xdp-bench-tx'
-	run-ndr "${pkt_size}" "${cmd}" "${tag}"
+	run-pdr "${pkt_size}" "${cmd}" "${tag}"
 
 	# Run with bpfwavelet varying parameters
 	for sampling_interval in "${sampling_intervals[@]}"; do
 		for decomposition_level in "${decomposition_levels[@]}"; do
 			cmd="sudo bpfwavelet -d -t ${sampling_interval} -l ${decomposition_level} -r ${interface} -v"
 			tag="bpfwavelet-${sampling_interval}-${decomposition_level}"
-			run-ndr "${pkt_size}" "${cmd}" "${tag}"
+			run-pdr "${pkt_size}" "${cmd}" "${tag}"
 		done
 	done
 done
