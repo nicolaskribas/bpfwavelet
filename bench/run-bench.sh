@@ -178,7 +178,7 @@ cleanup() {
 	rc="${?}"
 	trap '' EXIT INT QUIT TERM HUP
 
-	remote_kill
+	remote_kill 2>/dev/null || true # or-true: when exiting gracefully no remote process is left running
 
 	exit "${rc}"
 }
