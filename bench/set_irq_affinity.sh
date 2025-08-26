@@ -9,7 +9,7 @@ if [ "${EUID:-$(id -u)}" -ne 0 ]; then
 	exit 1
 fi
 
-pkill irqbalance
+pkill irqbalance || true # or-true: irqbalance may not be running
 
 for irq_name_dir in /proc/irq/*/mlx5_comp*/; do
 	irq_dir="$(dirname "${irq_name_dir}")"
