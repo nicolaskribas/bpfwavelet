@@ -11,11 +11,11 @@ interface="${1}"
 tmux new-session -d -A -s monitor-counters
 
 tmux rename-window monitor-counters
-tmux send-keys -t monitor-counters "watch -n 1 /tmp/diff_counters_inner.sh ${interface}" C-m
+tmux send-keys -t monitor-counters "watch -n 0.983 /tmp/diff_counters_inner.sh ${interface}" C-m
 shift
 for interface in "$@"; do
 	tmux split-window -t monitor-counters
-	tmux send-keys -t monitor-counters "watch -n 1 /tmp/diff_counters_inner.sh ${interface}" C-m
+	tmux send-keys -t monitor-counters "watch -n 0.983 /tmp/diff_counters_inner.sh ${interface}" C-m
 done
 tmux select-layout -t monitor-counters even-horizontal
 tmux attach -t monitor-counters
