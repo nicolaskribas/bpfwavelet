@@ -10,24 +10,24 @@ fi
 interface="${1}"
 interface_counters_file="/tmp/${interface}_stats"
 
-ethtool -S "${interface}" >"${interface_counters_file}"
-printf 'time_ns: %s' "$(date '+%s%N')" >>"${interface_counters_file}"
+{
+	printf 'time_ns: %s' "$(date '+%s%N')"
+	ethtool -S "${interface}"
+} >"${interface_counters_file}"
 
 [ -f "${interface_counters_file}.old" ] && awk '
 	NR == FNR {
 		key=$1;
 		val[key]=$2;
 	}
-
 	NR != FNR {
 		key=$1;
 		diff = $2 - val[key];
-
 		if (diff != 0) {
 			sign = (diff > 0) ? "+" : "";
 			printf "%s %s%'\''d\n", key, sign, diff;
 		}
 	}
-' "${interface_counters_file}.old" "${interface_counters_file}"
+' "${interface_counters_file}.old" "${interface_counters_file}" || true # or-true: awk returns nonzero status code on broken pipe
 
 mv "${interface_counters_file}" "${interface_counters_file}.old"
