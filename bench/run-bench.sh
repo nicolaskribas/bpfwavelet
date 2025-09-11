@@ -9,6 +9,7 @@ ports='0,0'
 delay='1000'  # in milliseconds
 duration='60' # in seconds
 repetitions='30'
+streams='32'
 
 usage() {
 	printf -- "%s\n" "${0}"
@@ -168,6 +169,7 @@ run-pdr() {
 		--delay "${delay}" \
 		--duration "${duration}" \
 		--repetitions "${repetitions}" \
+		--streams 32 \
 		--results "${run_dir}/${pkt_size}.json"
 	echo "Results written to: ${run_dir}/${pkt_size}.json"
 
@@ -186,7 +188,7 @@ trap cleanup EXIT INT QUIT TERM HUP
 
 for pkt_size in "${pkt_sizes[@]}"; do
 	# Run with xdp-bench: our baseline
-	cmd="sudo xdp-bench tx ${interface}"
+	cmd="sudo xdp-bench tx --packet-operation=no-touch ${interface}"
 	tag='xdp-bench-tx'
 	run-pdr "${pkt_size}" "${cmd}" "${tag}"
 

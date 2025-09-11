@@ -23,8 +23,8 @@ Implementation details
 ----------------------
 
 If --profile is given, it's loaded; otherwise, the built-in profiles with
-packets of size --size is used. The profile is added to the even-numbered
---ports.
+--streams number of streams and packets of size --size is used. The profile is
+added to the even-numbered --ports.
 
 To measure:
 
@@ -220,40 +220,43 @@ def pad_packet(unpadded, size: int):
     return unpadded / pad
 
 
-def get_builtin_profile(packet_size: int):
-    pkt = Ether() / IP(src="10.0.1.1", dst="10.0.0.0") / UDP(sport=2048, dport=2048)
-    pkt = pad_packet(pkt, packet_size)
+def udp_packet_for_benchmarking(packet_size: int, source_port_offset: int):
+    # 49152: first dynamic/private port
+    base_port = 49152
+    # 198.18.0.0/15: IANA assigned addresses for benchmarking.
+    base_address = "192.18.0."
 
-    multi_dst_vm = trex.STLScVmRaw(
-        [
-            trex.STLVmFlowVar(
-                "dst",
-                min_value="10.0.0.0",  # pyright: ignore[reportArgumentType]
-                max_value="10.0.0.255",  # pyright: ignore[reportArgumentType]
-                size=4,
-                step=1,
-                op="inc",
+    pkt = (
+        Ether()
+        / IP(src=base_address + "2", dst=base_address + "1")
+        / UDP(sport=base_port + source_port_offset, dport=base_port)
+    )
+
+    return pad_packet(pkt, packet_size)
+
+
+def get_builtin_profile(packet_size: int, stream_count: int):
+    # Streams that will put pressure on the system. The rate is affected by multipliers
+    pressure_streams = [
+        trex.STLStream(
+            packet=trex.STLPktBuilder(
+                udp_packet_for_benchmarking(packet_size, source_port_offset=i)
             ),
-            trex.STLVmWrFlowVar("dst", pkt_offset="IP.dst"),
-            trex.STLVmFixIpv4(offset="IP"),
-        ],
-        cache_size=256,  # It will only produce the first 256 packets (10.0.0.0-10.0.0.255) following the VM rules and cache them
-    )
-
-    # Stream that will put pressure on the system. The rate is affected by multipliers
-    pressure_stream = trex.STLStream(
-        packet=trex.STLPktBuilder(pkt, vm=multi_dst_vm),
-        mode=trex.STLTXCont(pps=1),
-    )
+            mode=trex.STLTXCont(pps=1),
+        )
+        for i in range(stream_count)
+    ]
 
     # Stream with latency information and fixed rate of 1000pps, for gathering latency statistics
     latency_stream = trex.STLStream(
-        packet=trex.STLPktBuilder(pkt),
+        packet=trex.STLPktBuilder(
+            udp_packet_for_benchmarking(packet_size, source_port_offset=0)
+        ),
         mode=trex.STLTXCont(pps=1000),
         flow_stats=trex.STLFlowLatencyStats(pg_id=0),
     )
 
-    return trex.STLProfile([pressure_stream, latency_stream])
+    return trex.STLProfile([*pressure_streams, latency_stream])
 
 
 def get_args():
@@ -324,6 +327,12 @@ def get_args():
         help="packet size in bytes for the builtin traffic profile (default: %(default)s)",
     )
     profile_group.add_argument(
+        "--streams",
+        type=int,
+        default=1,
+        help="number of streams for the builtin traffic profile (default: %(default)s)",
+    )
+    profile_group.add_argument(
         "--profile",
         type=str,
         help="path to python file with the traffic profile to be used instead of the builtin one",
@@ -343,7 +352,7 @@ if __name__ == "__main__":
             print(f"Error loading profile: {err}", file=sys.stderr)
             exit(1)
     else:
-        profile = get_builtin_profile(args.size)
+        profile = get_builtin_profile(args.size, args.streams)
 
     try:
         client.connect()
