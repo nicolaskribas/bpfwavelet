@@ -35,22 +35,6 @@ struct timer_wrapper {
 	struct bpf_timer timer;
 };
 
-static __always_inline void swap_src_dst_mac(void *data)
-{
-	unsigned short *p = data;
-	unsigned short dst[3];
-
-	dst[0] = p[0];
-	dst[1] = p[1];
-	dst[2] = p[2];
-	p[0] = p[3];
-	p[1] = p[4];
-	p[2] = p[5];
-	p[3] = dst[0];
-	p[4] = dst[1];
-	p[5] = dst[2];
-}
-
 static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *wrap)
 {
 	__u16 j;
@@ -111,11 +95,6 @@ static int collect_process_sample(void *map, __u32 *key, struct timer_wrapper *w
 SEC("xdp")
 int bpfwavelet(struct xdp_md *ctx)
 {
-	void *data_end = (void *)(long)ctx->data_end;
-	void *data = (void *)(long)ctx->data;
-	struct ethhdr *eth = data;
-	__u64 nh_off = sizeof(*eth);
-
 	struct timer_wrapper *wrap = bpf_map_lookup_elem(&timer_map, &timer_key);
 	if (wrap) {
 		if (!timer_was_init) {
@@ -128,10 +107,6 @@ int bpfwavelet(struct xdp_md *ctx)
 	}
 
 	if (reflect) {
-		if (data + nh_off > data_end)
-			return XDP_ABORTED;
-
-		swap_src_dst_mac(data);
 		return XDP_TX;
 	}
 
