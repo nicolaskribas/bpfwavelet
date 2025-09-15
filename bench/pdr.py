@@ -319,23 +319,22 @@ def get_args():
         default=30,
         help="number of mesurements taken repeatedly with the found pdr (default: %(default)s)",
     )
-    profile_group = parser.add_mutually_exclusive_group()
-    profile_group.add_argument(
+    parser.add_argument(
         "--size",
         type=int,
         default=64,
         help="packet size in bytes for the builtin traffic profile (default: %(default)s)",
     )
-    profile_group.add_argument(
+    parser.add_argument(
         "--streams",
         type=int,
         default=1,
         help="number of streams for the builtin traffic profile (default: %(default)s)",
     )
-    profile_group.add_argument(
+    parser.add_argument(
         "--profile",
         type=str,
-        help="path to python file with the traffic profile to be used instead of the builtin one",
+        help="path to python file with the traffic profile to be used instead of the builtin one, --size and --streams will be ignored",
     )
     return parser.parse_args()
 
