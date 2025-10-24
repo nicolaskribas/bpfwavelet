@@ -8,7 +8,7 @@
 
 if [ ! -e Wednesday-workingHours.pcap ]; then
 	echo 'Wednesday-workingHours.pcap not found. Downloading it...'
-	curl 'http://205.174.165.80/CICDataset/CIC-IDS-2017/Dataset/CIC-IDS-2017/PCAPs/Wednesday-workingHours.pcap'
+	curl --remote-name --continue-at - 'http://205.174.165.80/CICDataset/CIC-IDS-2017/Dataset/CIC-IDS-2017/PCAPs/Wednesday-workingHours.pcap'
 fi
 
 # 2936765 packets
@@ -35,6 +35,9 @@ fi
 # editcap   Wednesday-workingHours.pcap -A 1499278320 -B 1499279564                                                                                                         Wednesday-workingHours-A_1499278320_B_1499279564.pcap &
 
 # Heartbleed isolated
-editcap   Wednesday-workingHours.pcap -A 1499278320 -B 1499279564 - | tcpdump -r- 'host 192.168.10.51 and host 172.16.0.1' -w- | tcprewrite --mtu-trunc -i - -o captures/heartbleed.pcap &
+editcap   Wednesday-workingHours.pcap -A 1499278320 -B 1499279564 - | tcpdump -r - 'host 192.168.10.51 and host 172.16.0.1' -w - | tcprewrite --mtu-trunc -i - -o captures/heartbleed.pcap &
+
+# Heartbleed isolated without packets being truncated
+editcap Wednesday-workingHours.pcap -A 2017-07-05T15:12:15-03:00 -B 2017-07-05T15:32:44-03:00 - | tcpdump -r - 'host 192.168.10.51 and host 172.16.0.1' -w captures/heartbleed-full.pcap &
 
 wait $(jobs -p)

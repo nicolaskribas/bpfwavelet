@@ -1,5 +1,7 @@
-#!/bin/sh
-#
+#!/bin/bash
+set -Eeuo pipefail
+trap 'echo "${0}: Error on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
+
 # This script wraps bpfwavelet for testing its functionality.
 # It expects a pcap coming from stdin, the capture is then replayed through a
 # virtual interface where bpfwavelet is running, the detected periodicities are
@@ -10,34 +12,68 @@
 # Usage example:
 # `tcpdump -r capture.pcap -w - 'tcp port 49705' | sudo ./bpfwavelet_pcap` -v -t 100000000 -l 32`
 
-finish() {
-	[ -n "$NS" ] && ip netns delete "$NS" >&2
-	unset NS
-}
-trap finish INT TERM EXIT
-
-bpfwavelet_bin="$(dirname -- "$(realpath -- "$0")")"../src/bpfwavelet
-if [ ! -x "$bpfwavelet_bin" ]; then
-	echo "$bpfwavelet_bin not found" >&2
+if ((EUID)); then
+	echo "Need root priviliges" >&2
 	exit 1
 fi
 
-NS="$(mktemp --dry-run XXX)" # generate a random name to use as network namespace
-ip netns add "$NS" >&2
+cleanup() {
+	es="${?}"
+	trap '' EXIT INT QUIT TERM HUP
 
-VETH0='veth0'
-VETH1='veth1'
-ip netns exec "$NS" ip link add "$VETH0" type veth peer name "$VETH1" >&2
-ip netns exec "$NS" ip link set "$VETH0" up >&2
-ip netns exec "$NS" ip link set "$VETH1" up >&2
+	[ -n "${net_ns}" ] && ip netns delete "${net_ns}" >&2
+	unset net_ns
+
+	exit "${es}"
+}
+trap cleanup EXIT INT QUIT TERM HUP
+
+script_dir="$(dirname -- "$(realpath -- "${0}")")"
+bpfwavelet_bin="${script_dir}/../src/bpfwavelet"
+if [ ! -x "${bpfwavelet_bin}" ]; then
+	echo "${bpfwavelet_bin} not found" >&2
+	exit 1
+fi
+
+net_ns="$(mktemp --dry-run XXX)" # generate a random name to use as network namespace
+ip netns add "${net_ns}" >&2
+
+veth0='veth0'
+veth1='veth1'
+
+ip netns exec "${net_ns}" ip link add "${veth0}" type veth peer name "${veth1}" >&2
+
+ip netns exec "${net_ns}" ip link set "${veth0}" mtu 18000 >&2
+ip netns exec "${net_ns}" ip link set "${veth1}" mtu 18000 >&2
+
+# this is to avoid getting packets from neighbor discovery, IPv6 still works
+ip netns exec "${net_ns}" sysctl -w net.ipv6.conf."${veth0}".disable_ipv6=1 >&2
+ip netns exec "${net_ns}" sysctl -w net.ipv6.conf."${veth1}".disable_ipv6=1 >&2
+
+ip netns exec "${net_ns}" ip link set "${veth0}" up >&2
+ip netns exec "${net_ns}" ip link set "${veth1}" up >&2
 
 # run bpfwavelet in the background with the script arguments
-ip netns exec "$NS" "$bpfwavelet_bin" -d "$VETH1" "$@" &
-bpfwavelet_pid="$!"
+ip netns exec "${net_ns}" "${bpfwavelet_bin}" -g "${veth1}" "${@}" &
+bpfwavelet_pid="${!}"
 
-sleep 5
+check_attached() {
+	for _ in $(seq 100); do
+		ip netns exec "${net_ns}" ip link show "${veth1}" | grep --quiet xdpgeneric && return 0
+		sleep 0.1
+	done
+	return 1
+}
+if ! check_attached; then
+	echo "XDP code was not attached" >&2
+	exit 1
+fi
+
+ip netns exec "${net_ns}" ip addr show "${veth0}" >&2
+ip netns exec "${net_ns}" ip addr show "${veth1}" >&2
 
 # read pcap from stdin and replay it
-ip netns exec "$NS" tcpreplay --preload-pcap -i "$VETH0" - <&0 >&2
+ip netns exec "${net_ns}" tcpreplay -i "${veth0}" - <&0 >&2
 
-kill "$bpfwavelet_pid"
+sleep 2 # wait for in-flight packets
+kill "${bpfwavelet_pid}"

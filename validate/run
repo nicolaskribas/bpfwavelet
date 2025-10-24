@@ -1,26 +1,23 @@
-#!/bin/sh
+#!/bin/bash
+set -Eeuo pipefail
+trap 'echo "${0}: Error on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
-script_location="$(dirname -- "$(realpath -- "$0")")"
-bpfwavelet_pcap_bin="${script_location}/bpfwavelet_pcap"
-mkdir -p "${script_location}/results"
+script_dir="$(dirname -- "$(realpath -- "${0}")")"
+invocation="$(date --iso-8601=seconds)"
+bpfwavelet_pcap_bin="${script_dir}/bpfwavelet_pcap"
 
-test() {
-	capture="$1"
-	filter="$2"
-	parameters="$3"
+mkdir -p "${script_dir}/results"
 
-	logfile="${script_location}/results/$(basename --suffix=.pcap "$capture")_$(echo "$filter" | tr -d '[:blank:]')_$(echo "$parameters" | tr -d '[:blank:]')"
+parameters='-t 100000000'
+for capture in captures/{cobalt-strike-filtered.pcap,heartbleed-full.pcap,trickbot-a-filtered.pcap,trickbot-b-filtered.pcap}; do
+	outfile="${script_dir}/results/$(basename --suffix=.pcap "${capture}")_$(echo "${parameters}" | tr -d '[:blank:]')_${invocation}"
+	errfile="${script_dir}/results/$(basename --suffix=.pcap "${capture}")_$(echo "${parameters}" | tr -d '[:blank:]')_${invocation}.err"
+	echo "saving to:"
+	echo "${outfile}"
+	echo "${errfile}"
+	sha256sum "${capture}"
 
-	tcpdump -r "$capture" -w - "$filter" | "$bpfwavelet_pcap_bin" -v $parameters >"$logfile" &
-}
-
-test captures/cobalt-strike.pcap '' '-t 250000000'
-
-test captures/trickbot-a.pcap '' '-t 250000000'
-
-test captures/trickbot-b.pcap '' '-t 250000000'
-
-test captures/heartbleed.pcap '' '-t 250000000'
-
-echo waiting for $(jobs -p)
-wait $(jobs -p)
+	echo "largest frame: $(tshark -r "${capture}" -T fields -e frame.len | sort -n | tail -1)" >"${errfile}"
+	capinfos -u -a -e "${capture}" >>"${errfile}"
+	"${bpfwavelet_pcap_bin}" ${parameters} <"${capture}" >"${outfile}" 2>>"${errfile}"
+done
