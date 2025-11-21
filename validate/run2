@@ -13,18 +13,18 @@ captures=(
 	# cobalt-strike-filtered.pcap
 	# cobalt-strike-filtered-trimmed.pcap
 	# heartbleed.pcap
-	heartbleed-full.pcap
+	# heartbleed-full.pcap
 	# trickbot-a.pcap
-	# trickbot-a-filtered.pcap
-	# trickbot-a-filtered-trimmed.pcap
-	# trickbot-a-filtered-trimmed-further.pcap
+	trickbot-a-filtered.pcap
+	trickbot-a-filtered-trimmed.pcap
+	trickbot-a-filtered-trimmed-further.pcap
 	# trickbot-b.pcap
-	# trickbot-b-filtered.pcap
-	# trickbot-b-filtered-trimmed.pcap
-	# trickbot-b-filtered-trimmed-further.pcap
+	trickbot-b-filtered.pcap
+	trickbot-b-filtered-trimmed.pcap
+	trickbot-b-filtered-trimmed-further.pcap
 )
 
-parameters='-t 120000000'
+parameters='-t 20000000000'
 for capture in "${captures[@]}"; do
 	capture="captures/${capture}"
 	outfile="${script_dir}/results/$(basename --suffix=.pcap "${capture}")_$(echo "${parameters}" | tr -d '[:blank:]')_${invocation}"

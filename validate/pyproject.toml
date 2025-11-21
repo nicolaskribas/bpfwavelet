@@ -7,5 +7,6 @@ requires-python = ">=3.13"
 dependencies = [
     "itables>=2.3.0",
     "pandas>=2.2.3",
+    "scienceplots>=2.1.1",
     "seaborn>=0.13.2",
 ]

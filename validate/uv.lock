@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 
 [[package]]
@@ -418,6 +418,18 @@ wheels = [
 ]
 
 [[package]]
+name = "scienceplots"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5e/04/aff33daa212cf6dd5427999062aab0289976dd1b0b842752e81ab17aef66/SciencePlots-2.1.1.tar.gz", hash = "sha256:d8d197e3410f87ebdad0b9c265eaab596094fb082d97123e835f6bc32800ab54", size = 10757, upload-time = "2023-11-25T19:10:12.943Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/51/2a/debffdd7061c7a65ab46c51e671b895dc8231c4a14950849c40699eb2070/SciencePlots-2.1.1-py3-none-any.whl", hash = "sha256:2e64d2e93b4f98702f30145dbb70d238f5dc315e227fec331489631232dfc9e0", size = 16472, upload-time = "2023-11-25T19:10:11.01Z" },
+]
+
+[[package]]
 name = "seaborn"
 version = "0.13.2"
 source = { registry = "https://pypi.org/simple" }
@@ -479,6 +491,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "itables" },
     { name = "pandas" },
+    { name = "scienceplots" },
     { name = "seaborn" },
 ]
 
@@ -486,6 +499,7 @@ dependencies = [
 requires-dist = [
     { name = "itables", specifier = ">=2.3.0" },
     { name = "pandas", specifier = ">=2.2.3" },
+    { name = "scienceplots", specifier = ">=2.1.1" },
     { name = "seaborn", specifier = ">=0.13.2" },
 ]
 

@@ -18,6 +18,7 @@ def _():
     import glob
     import json
     import re
+    import matplotlib.patches as mpatches
 
     import numpy as np
     import pandas as pd
@@ -25,7 +26,7 @@ def _():
     import matplotlib.pyplot as plt
     import marimo as mo
     from pandas import DataFrame
-    return DataFrame, glob, json, mo, np, pd, plt, re
+    return DataFrame, glob, json, mo, mpatches, np, pd, plt, re
 
 
 @app.cell
@@ -325,9 +326,9 @@ def _(df_agg, np, plt):
 
 
 @app.cell
-def _(df_agg, plt):
+def _(df_agg, mpatches, pd, plt):
     plt.rcdefaults()
-    plt.style.use(["science", "grid", "ieee"])
+    plt.style.use(["science", "grid", "ieee", "bright"])
 
 
     def plot_rate_size(size):
@@ -354,28 +355,42 @@ def _(df_agg, plt):
         def coloring(x):
             match x:
                 case ("xdp-bench-tx", _):
-                    return "black"
+                    return "k"
                 case (_, 0):
-                    return "red"
+                    return "r"
                 case (_, _):
-                    return "green"
+                    return "b"
+
+        colors = [
+            coloring((prog, level))
+            for prog, level in zip(base_rate["prog"], base_rate["level"])
+        ]
 
         ax.bar(
             base_rate["tag"],
             base_rate["mpps"]["mean"],
             yerr=base_rate["mpps"]["std"],
-            # color=,
+            color=colors,
         )
+        black_patch = mpatches.Patch(color="k", label="Baseline")
+        red_patch = mpatches.Patch(color="r", label="Signal-only")
+        green_patch = mpatches.Patch(color="b", label="Algorithm 1")
+
+        # Add the legend to the plot using the handles
+        ax.legend(handles=[black_patch, red_patch, green_patch])
 
         ax.set_ylabel("Throughput (Mpps)")
 
         ax.xaxis.minorticks_off()
         # ax.xaxis.majorticks_off()
         ax.set_xlabel("Decomposition levels")
-        ax.set_xticklabels(base_rate["level"])
+        ax.set_xticks(base_rate["tag"])
+        ax.set_xticklabels(["" if pd.isna(x) else x for x in base_rate["level"]])
+        if size == 1518:
+            ax.set_ylim(top=9)
 
-        # plt.show()
-        fig.savefig(f"rate-plot-size-{size}-{interval}.pdf")
+        plt.show()
+        # fig.savefig(f"rate-plot-size-{size}-{interval}.pdf")
 
 
     for s in df_agg[df_agg["timestamp"] == "2025-09-15T15:58:30-03:00"][
